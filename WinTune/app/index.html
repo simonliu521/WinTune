@@ -510,7 +510,7 @@ pre.details{max-height:150px;overflow:auto;background:#1b232d;border:1px solid v
     </div>
     <div class="navgroup">
       <div class="cap">管理</div>
-      <button class="navitem" data-view="apps"><span class="ico"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><path d="M14 17h6M17 14v6"/></svg></span>应用管理</button>
+      <button class="navitem" data-view="apps"><span class="ico"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><path d="M14 17h6M17 14v6"/></svg></span>应用卸载</button>
       <button class="navitem" data-view="repair"><span class="ico"><svg viewBox="0 0 24 24"><path d="M12 3.5l7 2.7v5.4c0 4.6-2.9 7.6-7 8.9-4.1-1.3-7-4.3-7-8.9V6.2z"/><path d="M9 12l2.2 2.2L15.5 10"/></svg></span>系统修复</button>
       <button class="navitem" data-view="net"><span class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5c2.6 2.4 3.9 5.4 3.9 8.5s-1.3 6.1-3.9 8.5c-2.6-2.4-3.9-5.4-3.9-8.5s1.3-6.1 3.9-8.5z"/></svg></span>网络修复</button>
     </div>
@@ -563,7 +563,7 @@ pre.details{max-height:150px;overflow:auto;background:#1b232d;border:1px solid v
           </button>
           <button class="qcard" onclick="go('apps')">
             <span class="qi"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><path d="M14 17h6M17 14v6"/></svg></span>
-            <span class="qb"><b>应用管理</b><p>卸载登记表全量列出，含丢失入口的残留</p></span>
+            <span class="qb"><b>应用卸载</b><p>调用官方卸载程序，不删安装目录</p></span>
             <span class="ar">›</span>
           </button>
           <button class="qcard" onclick="go('repair')">
@@ -718,7 +718,7 @@ pre.details{max-height:150px;overflow:auto;background:#1b232d;border:1px solid v
       </div>
       <!-- 应用管理 -->
       <div class="view" data-v="apps" hidden>
-        <div class="pagehead"><h2>应用管理</h2><p>清单来自系统的卸载登记表，可以按名字搜。卸载交给软件自己的卸载程序（窗口可见、由你确认），不做静默强删。系统自带组件和你自己装的软件分开列，没有卸载入口的项会单独标出来。</p></div>
+        <div class="pagehead"><h2>应用卸载</h2><p>清单来自系统卸载登记表，可以按名字搜。卸载只调用软件自己的卸载程序（窗口可见、由你确认），不删除安装目录，也不做静默强删。系统组件、运行库和驱动会单独标出，避免误卸。</p></div>
         <div class="toolstrip">
           <div class="sbox"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.2 4.2"/></svg><input id="appSearch" placeholder="搜名称 / 发布者 / 安装路径" oninput="renderApps()"></div>
           <div class="seg2" id="appSeg"></div>
@@ -964,8 +964,6 @@ var S = {
   items: {},          // id -> item
   order: [],          // 按到达顺序
   sel: {},
-  residues: [],
-  resFold: {},        // 软件残留：软件名 -> 是否展开（有可删项默认展开）
   reg: null,
   scanning: false,
   scanned: false,
@@ -1002,7 +1000,7 @@ function fmtElapsed(ms){
 function esc(s){ return (s==null?"":String(s)).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]; }); }
 
 /* ===== 导航 ===== */
-var titles = {overview:"概览", clean:"一键清理", tune:"系统优化", apps:"应用管理", repair:"系统修复", net:"网络修复", checks:"检测规则"};
+var titles = {overview:"概览", clean:"一键清理", tune:"系统优化", apps:"应用卸载", repair:"系统修复", net:"网络修复", checks:"检测规则"};
 var loaded = {};
 document.querySelectorAll(".navitem").forEach(function(btn){
   btn.addEventListener("click", function(){
@@ -1134,7 +1132,7 @@ function row(k, v){
 }
 
 function renderCleanKpi(){
-  var free = 0, care = 0, res = 0, keep = 0;
+  var free = 0, care = 0, keep = 0;
   S.order.forEach(function(id){
     var it = S.items[id];
     if(!it || !it.ok) return;
@@ -1142,14 +1140,13 @@ function renderCleanKpi(){
     else if(it.tier === "care") care += it.bytes;
     else if(it.tier === "keep") keep += it.bytes;
   });
-  S.residues.forEach(function(r){ if(!r.inUse) res += r.bytes; });
 
   var disk = S.sys && S.sys.disk ? S.sys.disk : null;
   $("cleanKpi").innerHTML =
     card("系统盘 C:", disk ? (disk.usedGB + "<span>/ " + disk.totalGB + " GB</span>") : "—",
          disk ? ("可用 " + disk.freeGB + " GB") : "") +
     card("安全可删", '<span style="color:var(--ok)">' + fmt(free) + '</span>', "随意删 · 默认勾选") +
-    card("可清理总计", '<span style="color:var(--warn)">' + fmt(free + care + res) + '</span>', "含谨慎项与软件残留") +
+    card("可清理总计", '<span style="color:var(--warn)">' + fmt(free + care) + '</span>', "含谨慎项") +
     card("不建议删", '<span style="color:var(--risk)">' + fmt(keep) + '</span>', "默认不勾 · 可强制删除");
 }
 
@@ -1166,7 +1163,7 @@ function renderLegend(){
 /* ===== 扫描 ===== */
 function startScan(){
   if(S.scanning) return;
-  S.items = {}; S.order = []; S.sel = {}; S.residues = []; S.resFold = {};
+  S.items = {}; S.order = []; S.sel = {};
   S.done = 0; S.total = 0; S.hidden = 0;
   S.upd = { data: null, sel: {} };
   $("resultArea").innerHTML = "";
@@ -1217,59 +1214,6 @@ function onScanDone(m){
 }
 
 /* 多个路径的最长公共目录；不足盘符级时返回空 */
-function commonDir(paths){
-  if(!paths || !paths.length) return "";
-  if(paths.length === 1) return paths[0];
-  var parts = paths[0].split("\\");
-  paths.slice(1).forEach(function(p){
-    var q = p.split("\\");
-    var i = 0;
-    while(i < parts.length && i < q.length && parts[i].toLowerCase() === q[i].toLowerCase()) i++;
-    parts = parts.slice(0, i);
-  });
-  var s = parts.join("\\");
-  return s.length >= 4 ? s : "";
-}
-
-/* 残留三态：建议删除 / 有残留 / 不建议删除 */
-function resStatusOf(r){
-  if(r.status) return r.status;
-  if(r.level === "vendor") return "不建议删除";
-  if((r.occs || []).some(function(o){ return o.kind !== "task"; })) return "有残留";
-  return "建议删除";
-}
-function resDeletable(r){ return resStatusOf(r) !== "不建议删除"; }
-
-/* 勾一个软件根行 = 把这一组能删的一起选中；在用的数据目录不进选择 */
-function toggleResGroup(brand){
-  var keys = [], allSel = true, any = false;
-  S.residues.forEach(function(r){
-    if(r.brand !== brand) return;
-    if(!resDeletable(r)) return;
-    var k = "res_" + r.id;
-    if(!S.items[k]) return;
-    any = true;
-    keys.push(k);
-    if(!S.sel[k]) allSel = false;
-  });
-  if(!any) return;
-  keys.forEach(function(k){ if(allSel) delete S.sel[k]; else S.sel[k] = true; });
-  renderGroups();
-}
-
-/* 点三角 / 点软件名：展开或收起这个软件下的目录清单（只改 DOM，不重渲染） */
-function toggleResFold(brand){
-  var boxes = document.querySelectorAll(".rgrp");
-  for(var i = 0; i < boxes.length; i++){
-    if(boxes[i].dataset.grp !== brand) continue;
-    var open = boxes[i].classList.contains("fold");   /* 当前是收起的 → 这次要展开 */
-    S.resFold[brand] = open;
-    boxes[i].classList.toggle("fold", !open);
-    var tri = boxes[i].querySelector(".rghead .tri");
-    if(tri) tri.textContent = open ? "▾" : "▸";
-  }
-}
-
 function renderGroups(){
   var html = "";
   var tiers = [
@@ -1310,68 +1254,7 @@ function renderGroups(){
     html += '</div>';
   });
 
-  /* 软件残留：按软件归并，一个根行勾选整组 */
-  if(S.residues.length){
-    var resGroups = [];
-    S.residues.forEach(function(r){
-      if(!S.items["res_" + r.id]) return;
-      var g = null;
-      for(var gi = 0; gi < resGroups.length; gi++){ if(resGroups[gi].brand === r.brand){ g = resGroups[gi]; break; } }
-      if(!g){ g = {brand: r.brand, items: []}; resGroups.push(g); }
-      g.items.push(r);
-    });
-    html += '<div class="gbox g2"><div class="ghead"><b>软件残留</b>' +
-      '<span class="tip">扫程序目录、ProgramData、用户 AppData 与其它固定盘；装着的软件只列出不标删除，同一个软件的多个目录合成一条</span>' +
-      '<span class="sum">' + resGroups.length + ' 个软件 · ' + S.residues.length + ' 个目录</span></div>';
-    function statusBadge(s){
-      if(s === "建议删除") return '<em class="badge2 ok">建议删除</em>';
-      if(s === "有残留") return '<em class="badge2 warn">有残留</em>';
-      return '<em class="badge2">在用 · 不可删</em>';
-    }
-    resGroups.forEach(function(g){
-      var keys = g.items.filter(resDeletable).map(function(r){ return "res_" + r.id; });
-      var selAll = keys.length > 0, selAny = false;
-      keys.forEach(function(k){ if(S.sel[k]) selAny = true; else selAll = false; });
-      var total = 0;
-      g.items.forEach(function(r){ total += (r.bytes || 0); });
-      /* 组头取最保守的结论：有一条不建议删，整组就不建议删 */
-      var gStat;
-      if(g.items.some(function(r){ return resStatusOf(r) === "建议删除"; })) gStat = "建议删除";
-      else if(g.items.some(function(r){ return resStatusOf(r) === "有残留"; })) gStat = "有残留";
-      else gStat = "不建议删除";
-      var root = commonDir(g.items.map(function(r){ return r.path; })) || g.items[0].path;
-      /* 有可删项默认展开，整组都不可删则收起；只有用户手动点过三角的组才记下状态 */
-      var open = S.resFold.hasOwnProperty(g.brand) ? S.resFold[g.brand] : (keys.length > 0);
-      var locTxt = g.items.length + ' 个目录' + (keys.length > 0 ? '（' + keys.length + ' 个可删）' : '') + ' · ' + root;
-      html += '<div class="rgrp' + (open ? '' : ' fold') + '" data-grp="' + esc(g.brand) + '">' +
-        '<div class="rghead" data-group="' + esc(g.brand) + '">' +
-        '<span class="ck ' + (keys.length === 0 ? "off" : (selAll ? "on" : (selAny ? "half" : ""))) + '" data-ck="' + esc(g.brand) + '" title="' + (keys.length === 0 ? "这组没有可删除的目录" : "勾选这个软件下的 " + keys.length + " 个可删目录") + '">' + (keys.length === 0 ? "" : (selAll ? "✓" : (selAny ? "–" : ""))) + '</span>' +
-        '<div class="nm"><span class="tri">' + (open ? "▾" : "▸") + '</span><b title="' + esc(g.brand) + '">' + esc(g.brand) + '</b></div>' +
-        '<div class="pt" title="' + esc(locTxt) + '">' + esc(locTxt) + '</div>' +
-        '<span class="sz">' + fmt(total) + '</span>' +
-        '<span class="tg">' + statusBadge(gStat) + '</span>' +
-        '<span class="op"><button class="mini" data-path="' + esc(root) + '" onclick="openItem(event)">打开目录</button></span>' +
-        '</div>';
-      g.items.forEach(function(r){
-        var key = "res_" + r.id;
-        var occs = r.occs || [];
-        var kk = {service:"服务", process:"进程", holder:"占用进程", task:"任务"};
-        var occTxt = occs.length ? (' · 占用 ' + occs.slice(0,2).map(function(o){ return (kk[o.kind] || "占用") + " " + o.name; }).join("、") + (occs.length > 2 ? " 等" : "")) : "";
-        var leaf = r.label || r.path.replace(/\\+$/, "").split("\\").pop() || r.path;
-        html += '<div class="crow sub" data-id="' + esc(key) + '">' +
-          '<span class="ck ' + (S.sel[key] ? "on" : "") + '">' + (S.sel[key] ? "✓" : "") + '</span>' +
-          '<div class="nm"><b title="' + esc(r.path) + '">' + esc(leaf) + '</b></div>' +
-          '<div class="pt two"><span title="' + esc(r.path) + '" style="color:var(--muted)">' + esc(r.path) + '</span>' +
-          '<span>' + esc(r.evidence) + occTxt + (r.created ? ' · 创建于 ' + esc(r.created) : '') + '</span></div>' +
-          '<span class="sz">' + fmt(r.bytes) + '</span>' +
-          '<span class="tg">' + statusBadge(resStatusOf(r)) + '</span>' +
-          '<span class="op"><button class="mini" data-path="' + esc(r.path) + '" onclick="openItem(event)">打开目录</button></span>' +
-          '</div>';
-      });
-      html += '</div>';   /* .rgrp 结束 */
-    });
-    html += '</div>';
-  }
+  /* 软件残留目录不再进入清理列表：未登记安装不等于已卸载，容易误删正在使用的绿色版/用户级安装程序。 */
 
   if(!html){
     html = '<div class="hint" style="margin-top:8px">' + (S.scanned ? "磁盘上没有发现可清理的目录。" : "点「开始扫描」后，这里会按 随意删 / 谨慎删 / 不建议删 三档列出每一项。") + '</div>';
@@ -1747,10 +1630,6 @@ document.addEventListener("click", function(e){
     if(ml.dataset.uid){ toggleUpd(ml.dataset.uid); return; }
     if(ml.dataset.id){ toggleMaint(ml.dataset.id); return; }
   }
-  var rgck = e.target.closest(".rghead .ck");
-  if(rgck && rgck.dataset.ck){ toggleResGroup(rgck.dataset.ck); return; }
-  var rg = e.target.closest(".rghead");
-  if(rg && rg.dataset.group){ toggleResFold(rg.dataset.group); return; }
   var crow = e.target.closest(".crow");
   if(!crow) return;
   if(crow.dataset.uid){ toggleUpd(crow.dataset.uid); return; }   /* 更新残留行 */
@@ -1758,11 +1637,6 @@ document.addEventListener("click", function(e){
   var it = S.items[id];
   if(!it || !it.ok) return;
   if(it.tier === "keep" && !it.force) return;      /* 一删就坏系统的项根本没列出来 */
-  if(it.tier === "residue"){
-    var rr = null;
-    (S.residues || []).forEach(function(x){ if("res_" + x.id === id) rr = x; });
-    if(rr && !resDeletable(rr)) return;            /* 在用 · 不可删：点不动，防止误勾强制删除 */
-  }
   if(S.sel[id]) delete S.sel[id]; else S.sel[id] = true;
   renderGroups();
 });
@@ -1810,17 +1684,13 @@ function updateSel(){
   setChk($("spAllChk"), k, keys.length);
 }
 
-/* 空间清理里能勾的键：存在的扫描项（含「不建议删」里已开放强制删除的）+ 可删的软件残留 */
+/* 空间清理里能勾的键：存在的扫描项（含「不建议删」里已开放强制删除的） */
 function spacePickable(){
   var keys = [];
   S.order.forEach(function(id){
     var it = S.items[id];
     if(!it || !it.ok) return;
     if(it.tier !== "keep" || it.force) keys.push(id);
-  });
-  (S.residues || []).forEach(function(r){
-    var k = "res_" + r.id;
-    if(S.items[k] && resDeletable(r)) keys.push(k);
   });
   return keys;
 }
@@ -1844,13 +1714,13 @@ function doPrepare(){
 }
 
 function tierName(t){
-  return t === "free" ? "随意删" : (t === "care" ? "谨慎删" : (t === "residue" ? "软件残留" : "不建议删"));
+  return t === "free" ? "随意删" : (t === "care" ? "谨慎删" : "不建议删");
 }
 function onPrepare(m){
   S.prepare = m;
   var rows = "";
   (m.plans || []).forEach(function(p){
-    var sub = p.ok ? (fmt(p.bytes) + " · " + tierName(p.tier) + (p.tier === "residue" && p.note ? " · " + p.note : "")) : p.why;
+    var sub = p.ok ? (fmt(p.bytes) + " · " + tierName(p.tier)) : p.why;
     rows += '<div class="mrow' + (p.ok ? "" : " skip") + '">' +
       '<span class="k" style="color:' + (p.ok ? "var(--ok)" : "var(--muted)") + '">' + (p.ok ? "✓" : "—") + '</span>' +
       '<div class="t"><b>' + esc(p.name) + '</b><p>' + esc(sub) + '</p></div>' +
@@ -2911,7 +2781,6 @@ function renderApps(){
         : '<span class="badge2 risk">无卸载命令</span>';
       else stBadge = a.kind === "system" ? '<span class="badge2">随系统</span>' : '<span class="badge2">无卸载命令</span>';
       var btns = (a.canUninstall && !a.runtime ? '<button class="mini" data-id="' + esc(a.id) + '" onclick="appUninstall(event)">卸载</button>' : '') +
-        (a.canRemove && !a.runtime ? '<button class="mini" data-id="' + esc(a.id) + '" onclick="appClean(event)" style="color:var(--risk);border-color:#5c2b2b">清除残留</button>' : '') +
         '<button class="mini" data-id="' + esc(a.id) + '" onclick="appOpenLoc(event)">打开目录</button>';
       html += '<div class="approw2">' +
         '<span class="appic">' + iconHtml + '</span>' +
@@ -2959,93 +2828,12 @@ function appUninstall(e){
     '<div class="hint danger">将调用 <b>' + esc(a.name) + '</b> 自己的卸载程序。卸载由它接管，会弹出它自己的窗口，请在那里完成。</div>' +
     '<div class="kv" style="margin-top:8px"><span>版本</span><b>' + esc(a.ver || "—") + '</b></div>' +
     '<div class="kv"><span>发布者</span><b>' + esc(a.pub || "—") + '</b></div>' +
-    '<div class="hint" style="margin-top:10px">本软件不做静默强删：卸载残留的目录请回到「一键清理」里处理。</div>',
+    '<div class="hint" style="margin-top:10px">WinTune 只负责启动官方卸载程序；卸载完成后，安装目录和残留项由你自己核对，不再自动删除。</div>',
     "打开卸载程序",
     function(){ post({cmd:"appUninstall", id: id}); }, "danger");
 }
 
 /* 卸载程序丢了的应用：先查清目录与快捷方式，再给两条路 —— 只移除登记 / 连目录一起删 */
-function appClean(e){
-  e.stopPropagation();
-  var id = e.currentTarget.getAttribute("data-id");
-  var a = findApp(id);
-  if(!a) return;
-  S.exec = false;
-  $("mTitle").textContent = "正在查看 " + (a.name || "这个应用");
-  $("mBody").innerHTML = '<div class="hint">核对安装目录、体积和快捷方式…</div>';
-  $("mFoot").innerHTML = '<button class="btn" disabled>读取中…</button>';
-  $("modal").classList.add("open");
-  post({cmd:"appLeftover", id:id});
-}
-
-function onAppLeftover(m){
-  if(!m.ok){ tipModal("没能读取这个应用", '<div class="hint">' + esc(m.msg || "读取失败") + '</div>'); return; }
-  var why = m.state === "missing"
-    ? '注册表登记的卸载程序已经不在：<span class="mono">' + esc(m.un || "—") + '</span>，点「卸载」不会有任何反应。'
-    : '这个应用没有写卸载命令，系统里也没有它的卸载入口。';
-  var sen = (m.sensitive && m.sensitive.length)
-    ? '<div class="hint danger" style="margin-top:10px">目录里有 <b>' + esc(m.sensitive.join(" / ")) + '</b> 这类目录，里面可能是邮件、聊天记录或配置；删掉不可恢复，先打开目录看一眼。</div>'
-    : "";
-  $("mTitle").textContent = "清除残留 · " + (m.name || "");
-  $("mBody").innerHTML =
-    '<div class="hint">' + why + '</div>' +
-    '<div class="kv" style="margin-top:8px"><span>注册表项</span><b style="font-size:11px">' + esc(m.regKey) + '</b></div>' +
-    (m.dir
-      ? '<div class="kv"><span>安装目录</span><b style="font-size:11px">' + esc(m.dir) + '</b></div>' +
-        '<div class="kv"><span>目录占用</span><b>' + fmt(m.bytes) + ' · ' + m.files + ' 个文件</b></div>'
-      : '<div class="kv"><span>安装目录</span><b>注册表里没有记录，找不到可删的目录</b></div>') +
-    (m.shortcuts ? '<div class="kv"><span>快捷方式</span><b>' + m.shortcuts + ' 个会一起删掉</b></div>' : "") +
-    sen +
-    '<div class="hint" style="margin-top:10px">两种做法都先把这个注册表项导出成 .reg 备份再动手。删除不进回收站；想先把文件留着，就点「仅移除登记」。</div>';
-  $("mFoot").innerHTML =
-    '<button class="btn ghost" data-id="' + esc(m.id) + '" data-mode="reg" onclick="doAppRemove(event)">' +
-      (m.dir ? "仅移除登记" : "移除登记") + '</button>' +
-    (m.dir
-      ? '<button class="btn danger" data-id="' + esc(m.id) + '" data-mode="full" onclick="doAppRemove(event)">删除目录并移除登记</button>'
-      : "");
-  $("modal").classList.add("open");
-}
-
-function doAppRemove(e){
-  e.stopPropagation();
-  var id = e.currentTarget.getAttribute("data-id");
-  var mode = e.currentTarget.getAttribute("data-mode");
-  S.exec = true;
-  $("mTitle").textContent = mode === "full" ? "正在删除目录并移除登记…" : "正在移除登记…";
-  $("mBody").innerHTML = '<div class="rlog" id="execLog"></div>' +
-    '<div class="hint" style="margin-top:8px">目录大的话要删一会儿，删不掉的文件会排到重启后处理。</div>';
-  $("mFoot").innerHTML = '<button class="btn" disabled>处理中…</button>';
-  post({cmd:"appRemove", id:id, mode:mode});
-}
-
-function onAppRemoveOut(m){
-  var box = document.getElementById("execLog");
-  if(!box) return;
-  box.textContent += (m.line || "") + "\n";
-  box.scrollTop = box.scrollHeight;
-}
-
-function onAppRemoveDone(m){
-  S.exec = false;
-  if(!m.ok && m.msg){ tipModal("没能清除", '<div class="hint">' + esc(m.msg) + '</div>'); return; }
-  $("mTitle").textContent = "清除完成 · " + (m.name || "");
-  $("mBody").innerHTML =
-    '<div class="grid g2" style="margin-bottom:12px">' +
-      card("释放空间", '<span style="color:var(--ok)">' + fmt(m.bytes || 0) + '</span>', (m.files || 0) + " 个文件已删除") +
-      card("注册表登记", m.reg ? '<span style="color:var(--ok)">已移除</span>' : '<span style="color:var(--risk)">没删掉</span>', m.backup ? "已导出 .reg 备份" : "没有备份") +
-    '</div>' +
-    (m.dir ? '<div class="kv"><span>安装目录</span><b style="font-size:11px">' + esc(m.dir) + '</b></div>' : "") +
-    (m.lnk ? '<div class="kv"><span>快捷方式</span><b>删了 ' + m.lnk + ' 个</b></div>' : "") +
-    (m.pending ? '<div class="kv"><span>重启后删除</span><b>' + m.pending + ' 个（被占用）</b></div>' : "") +
-    (m.failed ? '<div class="kv"><span>没删掉</span><b style="color:var(--risk)">' + m.failed + ' 个</b></div>' : "") +
-    (m.regErr ? '<div class="hint danger" style="margin-top:8px">移除登记失败：' + esc(m.regErr) + '</div>' : "") +
-    (m.backup ? '<div class="kv"><span>注册表备份</span><b style="font-size:11px">' + esc(m.backup) + '</b></div>' : "") +
-    (m.note ? '<div class="hint" style="margin-top:8px">' + esc(m.note) + '</div>' : "");
-  $("mFoot").innerHTML = '<button class="btn ghost" onclick="openBackup()">打开备份目录</button>' +
-    '<button class="btn pri" onclick="closeModal(); loadApps()">完成</button>';
-  loadApps();
-}
-
 function appOpenLoc(e){
   e.stopPropagation();
   post({cmd:"appLocation", id: e.currentTarget.getAttribute("data-id")});
@@ -3804,9 +3592,6 @@ if(bridge){
       case "init": onInit(m); break;
       case "scanStart": onScanStart(); break;
       case "scanItem": onScanItem(m); break;
-      case "residueItem":
-        S.residues.push(m);
-        break;
       case "regSummary": break;   /* 1.5.7 起注册表残留不再并入空间页，此消息已废弃 */
       case "scanDone": onScanDone(m); break;
       case "openPathResult": onOpenPath(m); break;
@@ -3827,9 +3612,6 @@ if(bridge){
       case "appsRec": onAppsRec(m); break;
       case "appOut": onAppOut(m); break;
       case "appDone": onAppDone(m); break;
-      case "appLeftover": onAppLeftover(m); break;
-      case "appRemoveOut": onAppRemoveOut(m); break;
-      case "appRemoveDone": onAppRemoveDone(m); break;
       case "appResult":
         if(!m.ok){ tipModal("操作没有完成", '<div class="hint">' + esc(m.msg) + '</div>'); loadApps(); }
         else toast(m.msg);

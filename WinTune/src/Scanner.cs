@@ -112,7 +112,6 @@ namespace WinTune
         public static string ScanAsJson(Action<string> onEvent, Func<bool> cancelled, out List<CleanItem> items)
         {
             List<CleanItem> plan = BuildPlan();
-            int beforeExtra = plan.Count;
             int total = 0;
             foreach (CleanItem it in plan) { if (it.Action == "delete") total++; }
 
@@ -184,51 +183,18 @@ namespace WinTune
                 }
             }
 
-            // ---- 软件残留：已装清单里找不到的安装目录；有占用也能删，删除前先停服务/进程 ----
-            List<ResidueHit> residues = Residue.Detect(onEvent);
-            foreach (ResidueHit h in residues)
-            {
-                CleanItem it = new CleanItem();
-                it.Id = "res_" + h.Id;
-                it.Name = h.Brand;
-                it.Path = h.Path;
-                it.Tier = "residue";
-                it.Note = h.Evidence;
-                it.Action = "delete";
-                it.Bytes = h.Bytes;
-                it.Files = h.Files;
-                it.DefaultOn = false;
-                it.Available = true;
-                it.SkipReason = "";
-                it.AllowSelf = true;
-                plan.Add(it);
-            }
+            /* 不再扫描或删除“软件残留”目录：
+               未登记安装 ≠ 已卸载。绿色软件、按用户安装、注册表缺失都可能被误判，
+               曾出现把正在使用的应用整个删掉。空间清理只处理明确属于缓存/临时文件的路径。 */
 
-            /* 注册表残留不在这里出：它归「一键清理 → 注册表清理」那个标签，空间页只列磁盘上的目录 */
-
-            long freeSum = 0, careSum = 0, keepSum = 0, resSum = 0;
-            int freeCnt = 0, careCnt = 0, keepCnt = 0, resCnt = 0;
+            long freeSum = 0, careSum = 0, keepSum = 0;
+            int freeCnt = 0, careCnt = 0, keepCnt = 0;
             foreach (CleanItem it in plan)
             {
-                if (it.Tier == "residue") { resCnt++; if (it.Available && it.Bytes > 0) resSum += it.Bytes; continue; }
                 if (!it.Available || it.Bytes <= 0) continue;
                 if (it.Tier == "free") { freeSum += it.Bytes; freeCnt++; }
                 else if (it.Tier == "care") { careSum += it.Bytes; careCnt++; }
                 else if (it.Tier == "keep") { keepSum += it.Bytes; keepCnt++; }
-            }
-
-            // 残留 / 注册表项是在逐项回报之后才构造的，这里补发给界面，否则它们无法勾选
-            int finalTotal = plan.Count;
-            for (int i = beforeExtra; i < plan.Count; i++)
-            {
-                if (onEvent == null) break;
-                onEvent(new JB()
-                    .Add("type", "scanItem")
-                    .Add("index", i + 1)
-                    .Add("total", finalTotal)
-                    .Raw("item", ItemJson(plan[i]))
-                    .End());
-                Log.Info("scan", "补发选项 " + plan[i].Id + " 可用=" + plan[i].Available);
             }
 
             items = plan;
@@ -238,7 +204,6 @@ namespace WinTune
                 .Add("freeBytes", freeSum).Add("freeCount", freeCnt)
                 .Add("careBytes", careSum).Add("careCount", careCnt)
                 .Add("keepBytes", keepSum).Add("keepCount", keepCnt)
-                .Add("residueBytes", resSum).Add("residueCount", resCnt)
                 .Add("elapsedMs", 0)
                 .End();
         }

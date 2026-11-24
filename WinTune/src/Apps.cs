@@ -13,8 +13,8 @@ using Microsoft.Win32;
 namespace WinTune
 {
     /// <summary>
-    /// 应用管理：读注册表已装程序、调用官方卸载程序、通过 winget 安装常用软件。
-    /// 卸载一律交给软件自己的卸载器（可见窗口），不做静默强制删除，避免删残留配置导致软件损坏。
+    /// 应用卸载：读注册表已装程序、调用官方卸载程序、通过 winget 安装常用软件。
+    /// 卸载一律交给软件自己的卸载器（可见窗口），不做静默强制删除，也不删除安装目录。
     /// </summary>
     public static class Apps
     {
@@ -26,6 +26,7 @@ namespace WinTune
             public string Pub = "";
             public string Loc = "";
             public string Uninstall = "";
+            public string QuietUninstall = "";
             public string Date = "";
             public long SizeKb = 0;
             public string Hive = "";
@@ -81,6 +82,7 @@ namespace WinTune
                             a.Pub = Str(sk, "Publisher");
                             a.Loc = Str(sk, "InstallLocation");
                             a.Uninstall = Str(sk, "UninstallString");
+                            a.QuietUninstall = Str(sk, "QuietUninstallString");
                             a.Date = Str(sk, "InstallDate");
                             a.DisplayIcon = Str(sk, "DisplayIcon");
                             string sz = Str(sk, "EstimatedSize");
@@ -321,10 +323,10 @@ namespace WinTune
         /* ============ 卸载程序可用性 / 残留清除 ============ */
 
         /// <summary>卸载命令里的可执行文件是否真的还在；相对名（MsiExec.exe / rundll32.exe）到系统目录找。</summary>
-        private static string UninstallerExe(App a)
+        private static string UninstallerExe(string cmd)
         {
-            if (a.Uninstall.Length == 0) return "";
-            string exe = FirstExe(a.Uninstall);
+            if (cmd == null || cmd.Length == 0) return "";
+            string exe = FirstExe(cmd);
             if (exe.Length == 0) return "";
             if (exe.IndexOf('\\') < 0 && exe.IndexOf('/') < 0)
             {
@@ -340,8 +342,11 @@ namespace WinTune
         /// <summary>ok = 卸载程序可用；missing = 写了命令但文件已经不在了；none = 根本没写卸载命令。</summary>
         public static string UninstallerState(App a)
         {
-            if (a.Uninstall.Length == 0) return "none";
-            return UninstallerExe(a).Length > 0 ? "ok" : "missing";
+            if (a.Uninstall.Length > 0)
+                return UninstallerExe(a.Uninstall).Length > 0 ? "ok" : "missing";
+            if (a.QuietUninstall.Length > 0)
+                return UninstallerExe(a.QuietUninstall).Length > 0 ? "ok" : "missing";
+            return "none";
         }
 
         /// <summary>安装目录：优先注册表 InstallLocation，其次卸载命令所在目录；盘根、系统关键目录一律不认。</summary>
@@ -350,6 +355,7 @@ namespace WinTune
             string dir = a.Loc == null ? "" : a.Loc.Trim().Trim('"').TrimEnd('\\');
             if (dir.Length > 0 && Directory.Exists(dir) && GuardOk(dir)) return dir;
             string exe = FirstExe(a.Uninstall);
+            if (exe.Length == 0) exe = FirstExe(a.QuietUninstall);
             if (exe.IndexOf('\\') >= 0)
             {
                 try
@@ -684,11 +690,12 @@ namespace WinTune
             if (ust != "ok")
                 return new JB().Add("type", "appResult").Add("ok", false)
                     .Add("msg", ust == "missing"
-                        ? ("这个程序的卸载程序已经不在了（" + a.Uninstall + "），官方卸载走不通；点这一行的「清除残留」可以移除登记并删掉安装目录")
-                        : "这个程序没有提供卸载命令，点这一行的「清除残留」可以移除登记").End();
+                        ? ("这个程序的卸载入口已经失效（" + (a.Uninstall.Length > 0 ? a.Uninstall : a.QuietUninstall) + "）")
+                        : "这个程序没有提供卸载命令，无法调用官方卸载器").End();
+            string command = a.Uninstall.Length > 0 ? a.Uninstall : a.QuietUninstall;
             try
             {
-                ProcessStartInfo si = new ProcessStartInfo(a.Uninstall);
+                ProcessStartInfo si = new ProcessStartInfo(command);
                 si.UseShellExecute = true;
                 si.WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.System);
                 Process p = Process.Start(si);
@@ -701,7 +708,7 @@ namespace WinTune
                 Log.Warn("apps", "卸载器启动失败：" + ex.Message);
                 MarkFail(a.Id);
                 return new JB().Add("type", "appResult").Add("ok", false)
-                    .Add("msg", "启动卸载程序失败：" + ex.Message + "。这一行已经换成「清除残留」，可以直接移除登记或连安装目录一起删").End();
+                    .Add("msg", "启动卸载程序失败：" + ex.Message + "。请从「设置 → 应用」或软件自己的目录处理").End();
             }
         }
 

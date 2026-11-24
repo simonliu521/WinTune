@@ -133,13 +133,6 @@ namespace WinTune
                 {
                     if (p.Item.Action == "delete")
                     {
-                        // 软件残留：先停掉指向该目录的服务/进程/计划任务，再删文件
-                        if (p.Item.Tier == "residue" && p.Item.AllowSelf && Directory.Exists(p.Item.Path))
-                        {
-                            try { Residue.PrepareDelete(p.Item.Path, onEvent); }
-                            catch (Exception ex) { Log.Warn("clean", "停止占用失败：" + ex.Message); }
-                        }
-
                         /* 传递优化缓存归 NetworkService 所有，普通进程（含管理员）直接删文件一律被拒，
                            必须交给 DO 服务自己的清理接口；失败时给出明确原因，不去逐文件硬删 */
                         if (p.Item.Id == "do_cache")

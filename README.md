@@ -18,9 +18,9 @@ WinTune 是一套面向 Windows 10/11 的系统优化、清理与硬件监控工
 ### WinTune 功能
 
 - **概览**：CPU、内存、显卡、硬盘、温度传感器、风扇与运行状态集中展示，支持一键清理和网络体检。
-- **一键清理**：扫描 C 盘临时文件、缓存、更新残留等；删除前生成清单并创建还原点，可回退。
+- **一键清理**：扫描 C 盘临时文件、缓存、更新残留等；不扫描或删除“软件残留”目录，删除前生成清单并创建还原点，可回退。
 - **系统优化**：按轻度、中度、重度档位管理系统优化项，支持逐项应用、撤销和原值备份。
-- **应用管理**：读取已安装程序，列出启动项、计划任务、后台服务和软件残留，支持停止占用后删除。
+- **应用卸载**：读取系统卸载登记表，调用软件自己的官方卸载程序；支持 `UninstallString` / `QuietUninstallString`，不删除安装目录、不做静默强删。
 - **系统修复**：提供扫描、修复、重置、重启等维护动作，并记录每一步的状态和结果。
 - **网络修复**：覆盖 DNS、网卡、网关、hosts、代理、服务、MTU、静态路由和测速。
 - **检测规则**：把清理建议、残留判定和维护项的来源、依据集中展示，便于核对。
@@ -87,9 +87,9 @@ WinTune is a Windows 10/11 system optimization, cleanup, and hardware monitoring
 ### WinTune features
 
 - **Overview**: CPU, memory, GPU, storage, temperature sensors, fan and runtime status, with one-click cleanup and network check.
-- **One-click cleanup**: Scans temporary files, caches, update residue and other C: drive items; creates a manifest and restore point before deletion.
+- **One-click cleanup**: Scans temporary files, caches, update residue and other C: drive items; it does not scan or delete "software residue" directories; creates a manifest and restore point before deletion.
 - **System optimization**: Manages optimization items by light/medium/heavy profiles, with per-item apply, revert and original-value backup.
-- **Application management**: Reads installed programs; lists startup items, scheduled tasks, background services and software residue; supports stopping locks before deletion.
+- **Application uninstall**: Reads the Windows uninstall registry and launches each app's own official uninstaller; supports `UninstallString` / `QuietUninstallString`, never deletes install directories or performs silent force removal.
 - **System repair**: Provides scan, repair, reset and restart maintenance actions, with per-step status and results.
 - **Network repair**: Covers DNS, network adapters, gateway, hosts, proxy, services, MTU, static routes and speed tests.
 - **Detection rules**: Shows the evidence and source for cleanup suggestions, residue decisions and maintenance items.
