@@ -20,6 +20,7 @@
 *.jpeg
 *.bmp
 *.gif
+!docs/screenshots/*.png
 
 # 旧版本与发布目录
 WinTune-*/
