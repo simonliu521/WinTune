@@ -1,0 +1,31 @@
+# 构建产物与二进制
+*.exe
+*.dll
+*.pdb
+*.obj
+*.lib
+*.zip
+*.7z
+*.rar
+
+# 配置与日志
+*.exe.config
+*.log
+*.bak
+*.bak_*
+
+# 截图与临时预览
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.gif
+
+# 旧版本与发布目录
+WinTune-*/
+runtime/
+vendor/
+
+# 系统与诊断输出
+*.csv
+*.txt.bak
