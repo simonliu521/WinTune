@@ -248,6 +248,34 @@ namespace WinTune
             return data;
         }
 
+        /// <summary>只读安装目录顶层，给卸载确认的「详细」用；不递归、不改文件。</summary>
+        private static string FilePreview(string loc)
+        {
+            if (string.IsNullOrEmpty(loc)) return "";
+            string dir = loc.Trim().Trim('"').TrimEnd('\\', '/');
+            try
+            {
+                if (!Directory.Exists(dir)) return "";
+                List<string> names = new List<string>();
+                int total = 0;
+                foreach (string p in Directory.EnumerateFileSystemEntries(dir))
+                {
+                    total++;
+                    if (names.Count < 12)
+                    {
+                        string n = Path.GetFileName(p);
+                        if (Directory.Exists(p)) n += "\\";
+                        names.Add(n);
+                    }
+                    if (total >= 500) break;
+                }
+                string s = string.Join("、", names.ToArray());
+                if (total > names.Count) s += " 等 " + total + " 项";
+                return s;
+            }
+            catch { return ""; }
+        }
+
         public static string ListJson()
         {
             List<App> list = List();
@@ -268,6 +296,7 @@ namespace WinTune
                     .Add("pub", a.Pub).Add("loc", a.Loc).Add("date", a.Date)
                     .Add("size", a.SizeKb).Add("hive", a.Hive)
                     .Add("kind", a.Kind)
+                    .Add("files", FilePreview(a.Loc))
                     .Add("icon", IconDataOf(iconPath))
                     .Add("exe", iconPath == null ? "" : iconPath)
                     .Add("runtime", keep)

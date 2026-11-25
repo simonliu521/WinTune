@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -295,6 +295,24 @@ button:disabled{cursor:not-allowed;opacity:.45}
 .mb{padding:16px 18px;overflow:auto;flex:1}
 .mf{padding:12px 18px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end;background:#151c25}
 .mf .btn{min-width:104px}
+.mf .mdetail{margin-right:auto;min-width:0;padding:7px 2px;border-color:transparent;background:transparent;color:var(--muted);font-size:12px}
+.mf .mdetail:hover{color:var(--text)}
+/* 卸载确认：进度条、详情抽屉 */
+.ustat{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:7px}
+.ustat b{color:var(--text);font-variant-numeric:tabular-nums}
+.ubar{height:9px;border-radius:5px;background:#222b36;overflow:hidden;margin-bottom:9px}
+.ubar i{display:block;height:100%;width:0;border-radius:5px;background:linear-gradient(90deg,#4f8dff,#3ddc97);transition:width .3s ease}
+.uhint{color:var(--muted);font-size:12px;line-height:1.6}
+.udetail{margin-top:12px;border-top:1px solid var(--line);padding-top:11px}
+.udhead{font-size:11.5px;color:var(--dim);letter-spacing:.4px;margin-bottom:7px}
+.urow{border:1px solid var(--line);border-radius:9px;background:var(--card);padding:9px 11px;margin-bottom:7px}
+.urow .ut{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.urow .ut b{font-size:12.5px}
+.urow .ut span{font-size:11px;color:var(--muted)}
+.urow .up{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;color:#9fb0c5;word-break:break-all;margin-top:5px;line-height:1.5}
+.urow .uf{font-size:11px;color:var(--muted);line-height:1.65;margin-top:5px}
+.urow .uf b{color:var(--text);font-weight:500}
+.uempty{font-size:11.5px;color:var(--dim);line-height:1.6}
 /* 修复的执行 / 完成弹窗：宽高固定，不再随日志多少变形，内容在自己里面滚 */
 .mbox.fixed{width:760px;height:640px;max-height:84vh}
 .mbox.fixed .mb{display:flex;flex-direction:column;overflow:auto}
@@ -532,13 +550,6 @@ pre.details{max-height:150px;overflow:auto;background:#1b232d;border:1px solid v
       <!-- 概览 -->
       <div class="view" data-v="overview">
         <div class="pagehead"><h2>概览</h2><p>这一页汇总整台电脑的实时状况：处理器、内存、硬盘的占用与温度，系统与依赖组件是否就绪，以及随软件附带的 MiniMonitor 截图设置。从左侧往下就是清理残留、整理注册表与启动项、修复系统组件；每一处改动前都会先写备份，随时可以回滚。</p></div>
-        <div id="pawnioWarn" style="display:none;margin:0 0 16px;padding:12px 16px;border:1px solid rgba(232,178,74,.35);border-radius:10px;background:rgba(232,178,74,.08);align-items:center;gap:14px">
-          <div style="flex:1">
-            <b id="pawnioTitle" style="color:var(--warn)">获取温度需安装依赖 PawnIO</b>
-            <div id="pawnioWarnText" style="margin-top:4px;color:var(--muted);font-size:12px"></div>
-          </div>
-          <button id="pawnioBtn" class="btn pri" onclick="installPawnio()">安装</button>
-        </div>
         <div class="hero" id="ovHero">
           <div>
             <div class="ht"><span class="hdot" id="heroDot"></span><h2 id="heroTitle">正在读取这台电脑的状态…</h2></div>
@@ -549,6 +560,14 @@ pre.details{max-height:150px;overflow:auto;background:#1b232d;border:1px solid v
             <button class="btn pri" onclick="ovBoost()">一键清理</button>
             <button class="btn" onclick="ovNet()">网络体检</button>
           </div>
+        </div>
+
+        <div id="pawnioWarn" style="display:none;margin:0 0 16px;padding:12px 16px;border:1px solid rgba(255,93,93,.42);border-radius:10px;background:rgba(255,93,93,.08);align-items:center;gap:14px">
+          <div style="flex:1">
+            <b id="pawnioTitle" style="color:var(--risk)">检测不到 CPU 温度，请安装依赖程序</b>
+            <div id="pawnioWarnText" style="margin-top:4px;color:var(--muted);font-size:12px"></div>
+          </div>
+          <button id="pawnioBtn" class="btn pri" onclick="installPawnio()">安装依赖</button>
         </div>
 
         <div class="qgrid" id="ovQuick">
@@ -564,7 +583,7 @@ pre.details{max-height:150px;overflow:auto;background:#1b232d;border:1px solid v
           </button>
           <button class="qcard" onclick="go('apps')">
             <span class="qi"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><path d="M14 17h6M17 14v6"/></svg></span>
-            <span class="qb"><b>应用卸载</b><p>BCU 统一卸载，支持单个与批量</p></span>
+            <span class="qb"><b>应用卸载</b><p>统一卸载，支持单个与批量</p></span>
             <span class="ar">›</span>
           </button>
           <button class="qcard" onclick="go('repair')">
@@ -719,7 +738,7 @@ pre.details{max-height:150px;overflow:auto;background:#1b232d;border:1px solid v
       </div>
       <!-- 应用管理 -->
       <div class="view" data-v="apps" hidden>
-        <div class="pagehead"><h2>应用卸载</h2><p>清单来自系统卸载登记表，可以按名字搜。卸载只走 BCUninstaller：单个和批量都由 BCU 执行，不调用软件自带卸载器，也不做残留/Junk 清理。所有软件只要 BCU 能接手都会显示卸载按钮；系统组件、运行库和驱动标成「谨慎卸载」，删前会再次确认。</p></div>
+        <div class="pagehead"><h2>应用卸载</h2><p>清单来自系统卸载登记表，可以按名字搜。卸载由统一卸载组件执行：单个和批量都不调用软件自带卸载器，也不做残留/Junk 清理。所有软件只要卸载组件能接手都会显示卸载按钮；系统组件、运行库和驱动标成「谨慎卸载」，删前会再次确认。</p></div>
         <div class="toolstrip">
           <div class="sbox"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.2 4.2"/></svg><input id="appSearch" placeholder="搜名称 / 发布者 / 安装路径" oninput="renderApps()"></div>
           <div class="seg2" id="appSeg"></div>
@@ -731,7 +750,7 @@ pre.details{max-height:150px;overflow:auto;background:#1b232d;border:1px solid v
           <button class="btn ghost" onclick="appSelectNone()">清空选择</button>
           <span class="note" id="appSelNote" style="margin-left:2px">已选 0 个</span>
           <button class="btn pri" id="appBatchBtn" disabled onclick="appBatchUninstall()">批量卸载</button>
-          <span class="note" id="bcuNote">读取 BCU 引擎状态…</span>
+          <span class="note" id="bcuNote">读取卸载组件状态…</span>
         </div>
         <div id="appList"><div class="sk"><i></i><i></i><i></i><i></i><i></i></div></div>
         <div class="sec" id="appRecSec"><h3>推荐安装</h3><div class="line"></div><span class="note">在线目录可用时显示，安装进度实时可见</span></div>
@@ -958,7 +977,7 @@ pre.details{max-height:150px;overflow:auto;background:#1b232d;border:1px solid v
 <!-- 预检 / 结果 弹层 -->
 <div class="modal" id="modal">
   <div class="mbox">
-    <div class="mh"><b id="mTitle">删除前预检</b><button onclick="closeModal()">✕</button></div>
+    <div class="mh"><b id="mTitle">删除前预检</b><button id="mClose" onclick="closeModal()">✕</button></div>
     <div class="mb" id="mBody"></div>
     <div class="mf" id="mFoot"></div>
   </div>
@@ -1881,19 +1900,28 @@ function kpiPatch(){
     : (m.admin ? "传感器未返回读数" : "需要管理员运行")));
   var pw = $("pawnioWarn");
   if(pw){
-    var needPawnio = !!(m.admin && hw.memTotalMb > 0 && hw.time && hw.pawnioSetup && !hw.pawnioRun);
+    var needPawnio = !hasTemp && hw.memTotalMb > 0 && hw.time;
     pw.style.display = needPawnio ? "flex" : "none";
     if(needPawnio){
-      var title = hw.pawnio ? "PawnIO 已安装但未运行" : "获取温度需安装依赖 PawnIO";
-      var txt = hw.pawnio
-        ? "PawnIO 驱动服务当前没有运行，启动后才能读取真实 CPU 温度。"
-        : "检测到 PawnIO 安装程序，点击右侧按钮启动安装。";
+      var title = "检测不到 CPU 温度，请安装依赖程序";
+      var setup = !!hw.pawnioSetup;
+      var txt = !m.admin
+        ? "请以管理员身份重新启动 WinTune，再安装依赖程序。"
+        : (!setup
+          ? "完整包缺少依赖安装程序，请重新解压完整版。"
+          : (hw.pawnio
+            ? "依赖已安装，但温度仍未返回；可重新安装依赖，或检查 MiniMonitor 组件是否完整。"
+            : "安装后即可读取真实 CPU 温度。"));
       var node = $("pawnioWarnText");
       if(node && node.textContent !== txt) node.textContent = txt;
       var t = $("pawnioTitle");
       if(t && t.textContent !== title) t.textContent = title;
       var b = $("pawnioBtn");
-      if(b && b.textContent !== (hw.pawnio ? "启动" : "安装")) b.textContent = hw.pawnio ? "启动" : "安装";
+      if(b){
+        var label = "安装依赖";
+        if(b.textContent !== label) b.textContent = label;
+        b.disabled = (!m.admin || !setup);
+      }
     }
   }
   setHtml("kpDisk", m.disk ? (m.disk.usedGB + "<span>/ " + m.disk.totalGB + " GB</span>") : "—");
@@ -2168,7 +2196,7 @@ function onMm(m){
 function mmSet(k, v){ post({cmd:"mmSet", key:k, value:String(v)}); }
 function installPawnio(){
   var hw = S.hw || {};
-  toast(hw.pawnio ? "正在启动 PawnIO 驱动…" : "正在运行 PawnIO 安装程序…");
+  toast(hw.pawnio ? "正在启动温度依赖…" : "正在安装温度依赖…");
   mmSet("pawnio", "1");
   setTimeout(loadHw, 6000);
   setTimeout(loadHw, 12000);
@@ -2193,7 +2221,7 @@ function onDeps(d){
     h += '<div class="kv"><span>' + it.n + ' <i style="color:var(--dim);font-style:normal">' + it.d + '</i></span>' +
       (ok ? '<b style="color:var(--ok)">已就绪</b>' : '<b style="color:var(--warn)">自动补装中</b>') + '</div>';
   });
-  h += '<div class="kv"><span>软件版本</span><b>' + esc((S.sys && S.sys.version) || "1.5.42") + '</b></div>';
+  h += '<div class="kv"><span>软件版本</span><b>' + esc((S.sys && S.sys.version) || "1.5.43") + '</b></div>';
   box.innerHTML = h;
 }
 
@@ -2650,6 +2678,7 @@ var pendingAction = null;
 function confirmModal(title, body, okText, okFn, okCls){
   $("mTitle").textContent = title;
   $("mBody").innerHTML = body;
+  $("mClose").style.visibility = "visible";
   pendingAction = okFn;
   $("mFoot").innerHTML = '<button class="btn ghost" onclick="closeModal()">取消</button>' +
     '<button class="btn ' + (okCls || "pri") + '" onclick="runPending()">' + esc(okText) + '</button>';
@@ -2665,6 +2694,7 @@ function runPending(){
 function tipModal(title, body, okText, okFn){
   $("mTitle").textContent = title;
   $("mBody").innerHTML = body;
+  $("mClose").style.visibility = "visible";
   pendingAction = function(){
     if(!S.exec) $("modal").classList.remove("open");
     if(okFn) okFn();
@@ -2787,8 +2817,8 @@ function renderAppBatch(){
   $("appBatchBtn").disabled = n === 0 || !S.apps.bcu || S.exec;
   if($("bcuNote")){
     $("bcuNote").textContent = S.apps.bcu
-      ? ("BCU " + (S.apps.bcuVer || "4.16") + " 已就绪 · 只走卸载，不清理残留")
-      : "缺少 BCU 引擎：把 BCUninstaller 4.16 便携包放到 BCU 文件夹";
+      ? ("卸载组件已就绪 · 只执行卸载，不清理残留")
+      : "卸载组件不完整，请重新解压完整版";
   }
 }
 
@@ -2804,68 +2834,158 @@ function appBatchUninstall(){
   bcuConfirm(ids);
 }
 
+function bcuDetailHtml(list, result, withLog){
+  var h = '<div class="udetail" id="bcuDetails" hidden><div class="udhead">卸载详细内容</div>';
+  list.forEach(function(a){
+    h += '<div class="urow"><div class="ut"><b>' + esc(a.name) + '</b><span>' +
+      esc(a.ver || "版本未知") + ' · ' + esc(a.pub || "发布者未知") +
+      (a.size ? ' · ' + fmt(a.size * 1024) : '') + '</span></div>' +
+      '<div class="up">安装目录：' + esc(a.loc || "系统组件，无固定安装目录") + '</div>' +
+      '<div class="uf"><b>文件</b>：' + (a.files ? esc(a.files) + '，由卸载程序移除。' : '安装目录下的程序文件、组件和该软件创建的快捷方式，由卸载程序移除。') + '</div>' +
+      '<div class="uf"><b>保留</b>：文档、下载、聊天记录、账号数据不会被主动清理。</div></div>';
+  });
+  if(result) h += result;
+  if(withLog) h += '<div class="rlog" id="execLog" style="margin-top:10px;max-height:160px;overflow:auto"></div>';
+  h += '</div>';
+  return h;
+}
+
+function bcuToggleDetail(){
+  var d = $("bcuDetails");
+  if(!d) return;
+  d.hidden = !d.hidden;
+  var b = $("bcuToggle");
+  if(b) b.textContent = d.hidden ? "详细 ▾" : "详细 ▴";
+}
+
+function bcuFoot(right){
+  $("mFoot").innerHTML = '<button class="btn mdetail" id="bcuToggle" onclick="bcuToggleDetail()">详细 ▾</button>' + right;
+}
+
+function bcuSetProgress(pct, text){
+  var p = Math.max(0, Math.min(100, Math.round(pct)));
+  if(S.uexec) S.uexec.progress = p;
+  var fill = $("uFill"), num = $("uPct"), st = $("uState");
+  if(fill) fill.style.width = p + "%";
+  if(num) num.textContent = p + "%";
+  if(st && text) st.textContent = text;
+}
+
+function bcuStartTimer(){
+  if(!S.uexec) return;
+  if(S.uexec.timer) clearInterval(S.uexec.timer);
+  S.uexec.timer = setInterval(function(){
+    if(!S.uexec || S.uexec.done) return;
+    var p = S.uexec.progress || 0;
+    if(p < 88) bcuSetProgress(Math.min(88, p + (p < 40 ? 2 : 1)), "正在卸载…");
+  }, 900);
+}
+
 function bcuConfirm(ids){
   if(!S.apps.bcu){
-    tipModal("缺少 BCU 引擎", '<div class="hint">把 BCUninstaller 4.16 便携包解压后放到程序目录的 <b>BCU</b> 文件夹，再点刷新。只复制 BCU-console.exe 不够，要带同目录依赖。</div>');
+    tipModal("缺少卸载组件", '<div class="hint">程序目录里的卸载组件不完整，请重新解压完整版后再试。</div>');
     return;
   }
   var list = [];
   ids.forEach(function(id){ var a = findApp(id); if(appSelectable(a)) list.push(a); });
   if(!list.length) return;
+  var one = list.length === 1;
   var caution = list.filter(function(a){ return a.status === "谨慎卸载"; }).length;
-  var names = list.slice(0, 6).map(function(a){ return "「" + a.name + "」"; }).join("、");
-  if(list.length > 6) names += " 等";
-  confirmModal(list.length > 1 ? "批量卸载确认" : "BCU 卸载确认",
-    '<div class="hint danger">将用 <b>BCUninstaller ' + esc(S.apps.bcuVer || "4.16") + '</b> 卸载 ' + list.length + ' 个程序：' + esc(names) + '。' +
-    '只执行卸载，不做软件残留扫描，不清理其它目录。卸载过程中可能弹出软件自己的窗口，请按提示完成。</div>' +
-    (caution ? '<div class="hint danger" style="margin-top:8px">其中 <b>' + caution + '</b> 个是「谨慎卸载」：系统组件、运行库或没有官方卸载命令，BCU 仍可接手，但可能影响其它软件或系统功能。</div>' : '') +
-    '<div class="hint" style="margin-top:8px">WinTune 自身组件不会出现在可卸载列表；系统软件只要 BCU 能接手也允许卸载，风险已在状态里标出。</div>',
-    "开始卸载",
-    function(){ startBcu(list.map(function(a){ return a.id; })); });
+  var names = list.map(function(a){ return a.name; }).join("、");
+  S.uexec = { list:list, ids:ids, done:false, progress:0, lines:0, timer:null };
+  $("mClose").style.visibility = "visible";
+  $("mTitle").textContent = one ? ("将要卸载 " + list[0].name + " 软件") : ("将要卸载 " + list.length + " 个软件");
+  $("mBody").innerHTML =
+    '<div class="hint danger">' + (one ? ('您确定要卸载 ' + esc(list[0].name) + ' 软件吗？')
+      : ('您确定要卸载这 ' + list.length + ' 个软件吗？')) + '</div>' +
+    (one ? '' : '<div class="uhint" style="margin-top:8px">' + esc(names) + '</div>') +
+    (caution ? '<div class="hint danger" style="margin-top:8px">其中 <b>' + caution + '</b> 个是系统组件、运行库或驱动，卸载可能影响其它软件或系统功能。</div>' : '') +
+    '<div class="uhint" style="margin-top:8px">卸载只移除该软件的程序文件和系统登记，不会主动清理个人文档、下载和聊天记录。</div>' +
+    bcuDetailHtml(list, null, false);
+  bcuFoot('<button class="btn ghost" onclick="closeModal()">取消</button>' +
+    '<button class="btn pri" onclick="startBcu()">开始卸载</button>');
+  $("modal").classList.add("open");
 }
 
 function startBcu(ids){
+  if(!S.uexec || S.uexec.done || !S.uexec.list) return;
   S.exec = true;
-  $("mTitle").textContent = "BCU 正在卸载";
-  $("mBody").innerHTML = '<div class="hint">BCU 正在扫描并匹配程序，随后逐个调用卸载器。请勿关闭窗口。</div>' +
-    '<div class="rlog" id="execLog" style="margin-top:10px;min-height:120px"></div>';
-  $("mFoot").innerHTML = '<button class="btn" disabled>处理中…</button>';
+  ids = S.uexec.ids;
+  var one = S.uexec.list.length === 1;
+  $("mTitle").textContent = one ? ("正在卸载 " + S.uexec.list[0].name + " 软件") : ("正在卸载 " + S.uexec.list.length + " 个软件");
+  $("mBody").innerHTML =
+    '<div class="ustat"><span>卸载进度</span><b id="uPct">0%</b></div>' +
+    '<div class="ubar"><i id="uFill"></i></div>' +
+    '<div class="uhint" id="uState">正在准备卸载…</div>' +
+    bcuDetailHtml(S.uexec.list, null, true);
+  bcuFoot('<button class="btn" disabled>卸载中…</button>');
+  $("mClose").style.visibility = "hidden";
   $("modal").classList.add("open");
+  bcuSetProgress(3, "正在准备卸载…");
+  bcuStartTimer();
   post({cmd:"bcuUninstall", ids:ids});
 }
 
 function onBcuStart(m){
-  var box = document.getElementById("execLog");
-  if(box) box.textContent = "";
-  $("mTitle").textContent = "BCU 正在卸载 · " + (m.total || 0) + " 个";
-  if($("mBody")) $("mBody").innerHTML = '<div class="hint">BCU 已启动，正在扫描程序并匹配卸载清单。' +
-    (m.skipped ? " 已跳过 " + m.skipped + " 个不可卸载项。" : "") + '</div>' +
-    '<div class="rlog" id="execLog" style="margin-top:10px;min-height:120px"></div>';
+  if(!S.uexec) return;
+  var total = m.total || S.uexec.list.length;
+  $("mTitle").textContent = S.uexec.list.length === 1
+    ? ("正在卸载 " + S.uexec.list[0].name + " 软件")
+    : ("正在卸载 " + total + " 个软件");
+  bcuSetProgress(10, "正在扫描程序并匹配卸载清单…");
 }
 
 function onBcuLine(m){
   var box = document.getElementById("execLog");
-  if(!box) return;
-  box.textContent += (m.line || "") + "\n";
-  box.scrollTop = box.scrollHeight;
+  if(box){
+    var line = String(m.line || "").replace(/BCUninstaller|BCU-console|BCU/gi, "卸载引擎");
+    box.textContent += line + "\n";
+    box.scrollTop = box.scrollHeight;
+  }
+  if(!S.uexec || S.uexec.done) return;
+  S.uexec.lines = (S.uexec.lines || 0) + 1;
+  var p = S.uexec.progress || 10;
+  if(p < 88) bcuSetProgress(Math.min(88, p + 2), "正在卸载…");
 }
 
 function onBcuDone(m){
+  if(S.uexec && S.uexec.timer){ clearInterval(S.uexec.timer); S.uexec.timer = null; }
+  if(!S.uexec) return;
   S.exec = false;
-  var box = document.getElementById("execLog");
-  var log = box ? box.textContent : "";
-  var msg = m.msg || (m.ok ? "BCU 卸载完成" : "BCU 卸载未完成");
-  $("mTitle").textContent = m.ok ? "BCU 卸载完成" : "BCU 卸载未完成";
+  S.uexec.done = true;
+  var oldLog = document.getElementById("execLog");
+  var logText = oldLog ? oldLog.textContent : "";
+  var list = S.uexec.list || [];
+  var caution = list.filter(function(a){ return a.status === "谨慎卸载"; }).length;
+  var result = '<div class="udhead" style="margin-top:12px">卸载结果</div>' +
+    '<div class="uhint">' + (m.ok ? '卸载已完成。' : '卸载未完成，请展开详细日志查看。') + '</div>';
+  if(!m.ok && m.msg) result += '<div class="uhint" style="margin-top:5px">' + esc(String(m.msg).replace(/BCUninstaller|BCU-console|BCU/gi, "卸载引擎")) + '</div>';
+  if(m.remainingNames) result += '<div class="uhint" style="margin-top:5px">仍存在：' + esc(m.remainingNames) + '</div>';
+  if(m.regRemoved) result += '<div class="uhint" style="margin-top:5px">已移除失效登记 ' + m.regRemoved + ' 条。</div>';
+  if(m.skipped) result += '<div class="uhint" style="margin-top:5px">跳过不可卸载项 ' + m.skipped + ' 个。</div>';
+  $("mTitle").textContent = m.ok ? "卸载完成" : "卸载未完成";
   $("mBody").innerHTML =
-    '<div class="grid g2" style="margin-bottom:12px">' +
-      card("本次选中", String(m.total || 0) + " 个", m.skipped ? "跳过 " + m.skipped + " 个不可卸载项" : "只执行卸载") +
-      card("仍存在", '<span style="color:' + ((m.remaining || 0) > 0 ? "var(--warn)" : "var(--ok)") + '">' + (m.remaining || 0) + '</span>', "重新扫描卸载登记表") +
-      card("补删登记", String(m.regRemoved || 0) + " 条", "仅限本次选中且目录已删除") +
+    '<div class="ustat"><span>' + (m.ok ? '卸载完成' : '卸载未完成') + '</span><b id="uPct">100%</b></div>' +
+    '<div class="ubar"><i id="uFill" style="width:100%"></i></div>' +
+    '<div class="grid g2" style="margin:12px 0">' +
+      card("卸载结果", (m.ok ? '<span style="color:var(--ok)">完成</span>' : '<span style="color:var(--risk)">未完成</span>'), "") +
+      card("选中软件", String(m.total || list.length) + " 个", caution ? caution + " 个谨慎项" : "") +
+      card("仍存在", String(m.remaining || 0) + " 个", "可在完成后刷新列表") +
     '</div>' +
-    '<div class="hint' + (m.ok ? '' : ' danger') + '">' + esc(msg) + '</div>' +
-    (m.remainingNames ? '<div class="hint" style="margin-top:6px">仍存在：' + esc(m.remainingNames) + '</div>' : "") +
-    (log ? '<div class="rlog" style="margin-top:10px;max-height:180px;overflow:auto">' + esc(log) + '</div>' : "");
-  $("mFoot").innerHTML = '<button class="btn pri" onclick="closeModal(); loadApps()">完成</button>';
+    bcuDetailHtml(list, result, true);
+  var newLog = document.getElementById("execLog");
+  if(newLog) newLog.textContent = logText;
+  bcuFoot('<button class="btn pri" onclick="finishBcu()">完成</button>');
+  $("mClose").style.visibility = "hidden";
+  S.apps.sel = {};
+}
+
+function finishBcu(){
+  if(S.uexec && S.uexec.timer){ clearInterval(S.uexec.timer); S.uexec.timer = null; }
+  S.uexec = null;
+  S.exec = false;
+  $("mClose").style.visibility = "visible";
+  closeModal(true);
   S.apps.sel = {};
   loadApps();
 }
@@ -2903,8 +3023,8 @@ function renderApps(){
   renderAppsKpi();
 
   var groups = [
-    {k:"personal", name:"个人安装", tip:"你自己装的软件；卸载统一交给 BCU"},
-    {k:"system",   name:"系统应用", tip:"随 Windows 安装或微软组件；能由 BCU 接手的也会显示卸载按钮，统一标「谨慎卸载」"}
+    {k:"personal", name:"个人安装", tip:"你自己装的软件；卸载统一执行"},
+    {k:"system",   name:"系统应用", tip:"随 Windows 安装或微软组件；能由卸载组件接手的也会显示卸载按钮，统一标「谨慎卸载」"}
   ];
   var html = "";
   groups.forEach(function(g){
