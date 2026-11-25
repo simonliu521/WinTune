@@ -460,7 +460,7 @@ pre.details{max-height:150px;overflow:auto;background:#1b232d;border:1px solid v
 .searchbox:focus,.sbox:focus-within{border-color:rgba(79,141,255,.55);box-shadow:0 0 0 3px rgba(79,141,255,.14)}
 
 /* 首页总览卡：电脑管家那种「先给结论 + 一个大按钮」 */
-.hero{position:relative;display:grid;grid-template-columns:1fr auto;align-items:center;gap:20px;
+.hero{position:relative;display:grid;grid-template-columns:minmax(0,auto) minmax(0,1fr) auto;align-items:center;gap:20px;
   padding:20px 22px;border:1px solid #27384c;border-radius:16px;overflow:hidden;
   background:radial-gradient(1200px 220px at 8% -40%,rgba(79,141,255,.22),transparent 60%),linear-gradient(135deg,#1b2635,#16202b 58%,#17262f)}
 .hero:after{content:"";position:absolute;right:-60px;top:-90px;width:240px;height:240px;border-radius:50%;
@@ -471,6 +471,9 @@ pre.details{max-height:150px;overflow:auto;background:#1b232d;border:1px solid v
 .hero .hdot.risk{background:var(--risk);box-shadow:0 0 0 4px rgba(255,93,93,.14)}
 .hero h2{font-size:19px;font-weight:650;letter-spacing:.2px}
 .hero .hs{margin-top:5px;color:var(--muted);font-size:12.5px;line-height:1.7;max-width:640px}
+.hero .hdiag{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;min-width:0;padding:2px 4px}
+.hero .hdiag .dchip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;line-height:1.4;color:#ffc7c7;background:rgba(255,93,93,.10);border:1px solid rgba(255,93,93,.34);border-radius:8px;padding:4px 9px;white-space:nowrap}
+.hero .hdiag .dchip b{font-weight:650;color:#ffdede}
 .hero .ha{display:flex;flex-direction:column;gap:8px;min-width:168px}
 .hero .ha .btn{justify-content:center;padding:10px 16px}
 .qgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0 4px}
@@ -560,6 +563,7 @@ pre.details{max-height:150px;overflow:auto;background:#1b232d;border:1px solid v
           <div>
             <div class="ht"><span class="hdot" id="heroDot"></span><h2 id="heroTitle">正在读取这台电脑的状态…</h2></div>
           </div>
+          <div class="hdiag" id="heroDiag"></div>
           <div class="ha">
             <button class="btn pri" onclick="ovBoost()">一键清理</button>
             <button class="btn" onclick="ovNet()">网络体检</button>
@@ -1051,20 +1055,33 @@ function ovNet(){ loaded.net = false; go("net"); }
 function ovPatch(){
   var m = S.sys || {}, hw = S.hw || {};
   var mem = hw.memLoad, cpu = hw.cpuLoad, disk = m.disk;
-  var bad = [];
-  if(mem >= 85) bad.push("内存占用 " + mem + "%");
-  if(cpu >= 85) bad.push("CPU 占用 " + Math.round(cpu) + "%");
-  if(disk && disk.totalGB > 0 && disk.freeGB / disk.totalGB < 0.1) bad.push("C 盘只剩 " + disk.freeGB + " GB");
+  var issues = [];
+  function addIssue(label, value){ issues.push({ label: label, value: value }); }
+  if(hw.cpuTemp >= 80) addIssue("CPU 温度", Math.round(hw.cpuTemp) + " °C");
+  var gpus = hw.gpus || [];
+  for(var gi = 0; gi < gpus.length; gi++){
+    var g = gpus[gi] || {};
+    if(g.temp >= 90) addIssue(gpus.length > 1 ? "显卡" + (gi + 1) + "温度" : "显卡温度", Math.round(g.temp) + " °C");
+  }
+  if(hw.memTemp >= 80) addIssue("内存温度", Math.round(hw.memTemp) + " °C");
+  if(mem >= 85) addIssue("内存占用", mem + "%");
+  if(cpu >= 85) addIssue("CPU 占用", Math.round(cpu) + "%");
+  if(disk && disk.totalGB > 0 && disk.freeGB / disk.totalGB < 0.1)
+    addIssue("C 盘剩余", Math.round(disk.freeGB / disk.totalGB * 100) + "%");
   if($("qFree") && disk) $("qFree").textContent = "C 盘可用 " + disk.freeGB + " GB · 扫临时文件、缓存、更新残留";
-  var dot = $("heroDot"), tt = $("heroTitle");
+  var dot = $("heroDot"), tt = $("heroTitle"), diag = $("heroDiag");
   if(!tt) return;
   if(!S.sys && !S.hw){ return; }
-  if(bad.length){
-    dot.className = "hdot warn";
-    tt.textContent = "有 " + bad.length + " 项资源占用偏高";
+  if(issues.length){
+    dot.className = "hdot risk";
+    tt.textContent = "检测到 " + issues.length + " 项硬件异常";
+    if(diag) diag.innerHTML = issues.map(function(x){
+      return '<span class="dchip"><b>' + esc(x.label) + '</b>' + esc(x.value) + '</span>';
+    }).join("");
   } else {
     dot.className = "hdot";
     tt.textContent = "运行状态正常";
+    if(diag) diag.innerHTML = "";
   }
 }
 function ensureView(v){
@@ -2217,7 +2234,7 @@ function onDeps(d){
     h += '<div class="kv"><span>' + it.n + ' <i style="color:var(--dim);font-style:normal">' + it.d + '</i></span>' +
       (ok ? '<b style="color:var(--ok)">已就绪</b>' : '<b style="color:var(--warn)">自动补装中</b>') + '</div>';
   });
-  h += '<div class="kv"><span>软件版本</span><b>' + esc((S.sys && S.sys.version) || "1.5.47") + '</b></div>';
+  h += '<div class="kv"><span>软件版本</span><b>' + esc((S.sys && S.sys.version) || "1.5.48") + '</b></div>';
   box.innerHTML = h;
 }
 

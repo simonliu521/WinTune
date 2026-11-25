@@ -22,6 +22,11 @@ namespace WinTune
         private static extern int GetSystemMetrics(int nIndex);
         private const int SM_REMOTESESSION = 0x1000;
 
+        [DllImport("user32.dll")]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+        private const int WM_SETICON = 0x80;
+        private Icon appIcon;
+
         private WebView2 wv;
         private SplashOverlay splash;
         private System.Windows.Forms.Timer readyTimer;
@@ -39,12 +44,8 @@ namespace WinTune
             MinimumSize = new Size(1080, 720);
             BackColor = Color.FromArgb(14, 17, 22);
 
-            try
-            {
-                string ico = Path.Combine(Application.StartupPath, @"assets\icon.ico");
-                if (File.Exists(ico)) Icon = new Icon(ico);
-            }
-            catch { }
+            appIcon = IconRepair.LoadAppIcon();
+            if (appIcon != null) Icon = appIcon;
 
             appDir = Path.Combine(Application.StartupPath, "app");
 
@@ -67,6 +68,18 @@ namespace WinTune
         {
             try { int v = 1; DwmSetWindowAttribute(Handle, 20, ref v, 4); } catch { }
             try { int v2 = 1; DwmSetWindowAttribute(Handle, 19, ref v2, 4); } catch { }
+            ApplyTaskbarIcon();
+        }
+
+        private void ApplyTaskbarIcon()
+        {
+            if (appIcon == null) return;
+            try
+            {
+                SendMessage(Handle, WM_SETICON, (IntPtr)1, appIcon.Handle); /* ICON_BIG */
+                SendMessage(Handle, WM_SETICON, IntPtr.Zero, appIcon.Handle); /* ICON_SMALL */
+            }
+            catch { }
         }
 
         private static bool RemoteAgentRunning()
@@ -115,6 +128,7 @@ namespace WinTune
 
         private void OnShown2(object sender, EventArgs e)
         {
+            ApplyTaskbarIcon();
             if (!Directory.Exists(appDir))
             {
                 MessageBox.Show("缺少界面目录：\n" + appDir + "\n\n请把 app 文件夹与 WinTune.exe 放在同一目录。",
@@ -536,7 +550,7 @@ namespace WinTune
             string dir = BackupDir();
             Send(new JB()
                 .Add("type", "init")
-                .Add("version", "1.5.47")
+                .Add("version", "1.5.48")
                 .Add("admin", SysInfo.IsAdmin())
                 .Add("osName", SysInfo.OsName())
                 .Add("build", SysInfo.BuildNumber())

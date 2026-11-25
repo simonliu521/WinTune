@@ -81,6 +81,7 @@ namespace WinTune
             f.MaximizeBox = false;
             f.ControlBox = false;
             f.ShowInTaskbar = true;
+            try { f.Icon = IconRepair.LoadAppIcon(); } catch { }
 
             Label l = new Label();
             l.AutoSize = false;

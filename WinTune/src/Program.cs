@@ -179,6 +179,10 @@ namespace WinTune
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                try { IconRepair.Ensure(); } catch { }
+            });
 
             /* 整包拷到全新电脑时最可能缺的就是 WebView2：缺了自己装，装不上才提示 */
             string dep = Dependency.EnsureWithUi();
