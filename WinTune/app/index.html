@@ -2175,7 +2175,7 @@ function onDeps(d){
     h += '<div class="kv"><span>' + it.n + ' <i style="color:var(--dim);font-style:normal">' + it.d + '</i></span>' +
       (ok ? '<b style="color:var(--ok)">已就绪</b>' : '<b style="color:var(--warn)">自动补装中</b>') + '</div>';
   });
-  h += '<div class="kv"><span>软件版本</span><b>' + esc((S.sys && S.sys.version) || "1.5.39") + '</b></div>';
+  h += '<div class="kv"><span>软件版本</span><b>' + esc((S.sys && S.sys.version) || "1.5.40") + '</b></div>';
   box.innerHTML = h;
 }
 
@@ -2964,7 +2964,21 @@ function appUninstall(e){
     '<div class="kv"><span>发布者</span><b>' + esc(a.pub || "—") + '</b></div>' +
     '<div class="hint" style="margin-top:10px">WinTune 只负责启动官方卸载程序；卸载完成后，安装目录和残留项由你自己核对，不再自动删除。</div>',
     "打开卸载程序",
-    function(){ post({cmd:"appUninstall", id: id}); }, "danger");
+    function(){ post({cmd:"appUninstall", id: id}); refreshAppAfterUninstall(id); }, "danger");
+}
+
+// 官方卸载器是独立进程，WinTune 不知道它什么时候结束；启动后轮询卸载登记表，
+// 该条一旦从列表消失就停止，不必整页手动刷新。
+function refreshAppAfterUninstall(id){
+  var tries = 0;
+  function tick(){
+    if(!S.apps.items || !findApp(id)) return;
+    if(tries >= 30) return;
+    tries++;
+    post({cmd:"apps"});
+    setTimeout(tick, 2000);
+  }
+  setTimeout(tick, 1200);
 }
 
 /* 卸载程序丢了的应用：先查清目录与快捷方式，再给两条路 —— 只移除登记 / 连目录一起删 */
