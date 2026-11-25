@@ -313,6 +313,14 @@ button:disabled{cursor:not-allowed;opacity:.45}
 .urow .uf{font-size:11px;color:var(--muted);line-height:1.65;margin-top:5px}
 .urow .uf b{color:var(--text);font-weight:500}
 .uempty{font-size:11.5px;color:var(--dim);line-height:1.6}
+/* 深度清理勾选：默认打开，红色警示，不跟普通说明混在一起 */
+.udeep{display:flex;align-items:flex-start;gap:9px;margin-top:10px;padding:10px 12px;border:1px solid rgba(255,93,93,.34);border-radius:10px;background:rgba(255,93,93,.07);cursor:pointer}
+.udeep input{margin:2px 0 0;width:14px;height:14px;flex:none;accent-color:var(--risk)}
+.udeep .udt{display:block;font-size:12.5px;font-weight:600;color:var(--text);line-height:1.45}
+.udeep .uds{display:block;margin-top:3px;font-size:11px;color:var(--muted);line-height:1.6}
+.udeep.off{border-color:var(--line);background:var(--card)}
+.udeep.off .udt{color:var(--muted)}
+.udeep.lock{opacity:.55;cursor:not-allowed}
 /* 修复的执行 / 完成弹窗：宽高固定，不再随日志多少变形，内容在自己里面滚 */
 .mbox.fixed{width:760px;height:640px;max-height:84vh}
 .mbox.fixed .mb{display:flex;flex-direction:column;overflow:auto}
@@ -2221,7 +2229,7 @@ function onDeps(d){
     h += '<div class="kv"><span>' + it.n + ' <i style="color:var(--dim);font-style:normal">' + it.d + '</i></span>' +
       (ok ? '<b style="color:var(--ok)">已就绪</b>' : '<b style="color:var(--warn)">自动补装中</b>') + '</div>';
   });
-  h += '<div class="kv"><span>软件版本</span><b>' + esc((S.sys && S.sys.version) || "1.5.43") + '</b></div>';
+  h += '<div class="kv"><span>软件版本</span><b>' + esc((S.sys && S.sys.version) || "1.5.44") + '</b></div>';
   box.innerHTML = h;
 }
 
@@ -2842,7 +2850,9 @@ function bcuDetailHtml(list, result, withLog){
       (a.size ? ' · ' + fmt(a.size * 1024) : '') + '</span></div>' +
       '<div class="up">安装目录：' + esc(a.loc || "系统组件，无固定安装目录") + '</div>' +
       '<div class="uf"><b>文件</b>：' + (a.files ? esc(a.files) + '，由卸载程序移除。' : '安装目录下的程序文件、组件和该软件创建的快捷方式，由卸载程序移除。') + '</div>' +
-      '<div class="uf"><b>保留</b>：文档、下载、聊天记录、账号数据不会被主动清理。</div></div>';
+      '<div class="uf"><b>保留</b>：' + (a.kind === "system"
+        ? '系统组件、运行库或驱动，深度清理不会执行。'
+        : '文档、下载、聊天记录、账号数据默认保留；勾选「删除所有个人数据与残留」后会一并删除该软件自己的数据目录。') + '</div></div>';
   });
   if(result) h += result;
   if(withLog) h += '<div class="rlog" id="execLog" style="margin-top:10px;max-height:160px;overflow:auto"></div>';
@@ -2881,6 +2891,11 @@ function bcuStartTimer(){
   }, 900);
 }
 
+function bcuDeepToggle(){
+  var c = $("bcuDeep"), box = $("bcuDeepBox");
+  if(c && box) box.classList.toggle("off", !c.checked);
+}
+
 function bcuConfirm(ids){
   if(!S.apps.bcu){
     tipModal("缺少卸载组件", '<div class="hint">程序目录里的卸载组件不完整，请重新解压完整版后再试。</div>');
@@ -2891,6 +2906,7 @@ function bcuConfirm(ids){
   if(!list.length) return;
   var one = list.length === 1;
   var caution = list.filter(function(a){ return a.status === "谨慎卸载"; }).length;
+  var deepable = list.filter(function(a){ return a.kind !== "system"; }).length;
   var names = list.map(function(a){ return a.name; }).join("、");
   S.uexec = { list:list, ids:ids, done:false, progress:0, lines:0, timer:null };
   $("mClose").style.visibility = "visible";
@@ -2900,7 +2916,14 @@ function bcuConfirm(ids){
       : ('您确定要卸载这 ' + list.length + ' 个软件吗？')) + '</div>' +
     (one ? '' : '<div class="uhint" style="margin-top:8px">' + esc(names) + '</div>') +
     (caution ? '<div class="hint danger" style="margin-top:8px">其中 <b>' + caution + '</b> 个是系统组件、运行库或驱动，卸载可能影响其它软件或系统功能。</div>' : '') +
-    '<div class="uhint" style="margin-top:8px">卸载只移除该软件的程序文件和系统登记，不会主动清理个人文档、下载和聊天记录。</div>' +
+    '<div class="uhint" style="margin-top:8px">卸载程序本身只移除该软件的程序文件和系统登记；个人数据是否清理由下面的勾选决定。</div>' +
+    '<label class="udeep' + (deepable === 0 ? ' off lock' : '') + '" id="bcuDeepBox">' +
+      '<input type="checkbox" id="bcuDeep"' + (deepable > 0 ? ' checked' : ' disabled') + ' onchange="bcuDeepToggle()">' +
+      '<span><span class="udt">删除所有个人数据与残留（不可恢复）</span>' +
+      '<span class="uds">' + (deepable === 0
+        ? '所选都是系统组件或运行库，深度清理不会执行。'
+        : '会额外删除该软件自己的安装目录、AppData 配置与缓存、账号数据、开始菜单快捷方式和注册表项；系统组件跳过。') + '</span></span>' +
+    '</label>' +
     bcuDetailHtml(list, null, false);
   bcuFoot('<button class="btn ghost" onclick="closeModal()">取消</button>' +
     '<button class="btn pri" onclick="startBcu()">开始卸载</button>');
@@ -2909,6 +2932,8 @@ function bcuConfirm(ids){
 
 function startBcu(ids){
   if(!S.uexec || S.uexec.done || !S.uexec.list) return;
+  var deep = !!($("bcuDeep") && $("bcuDeep").checked && !$("bcuDeep").disabled);
+  S.uexec.deep = deep;
   S.exec = true;
   ids = S.uexec.ids;
   var one = S.uexec.list.length === 1;
@@ -2917,13 +2942,16 @@ function startBcu(ids){
     '<div class="ustat"><span>卸载进度</span><b id="uPct">0%</b></div>' +
     '<div class="ubar"><i id="uFill"></i></div>' +
     '<div class="uhint" id="uState">正在准备卸载…</div>' +
+    '<div class="uhint" style="margin-top:6px;color:' + (deep ? 'var(--warn)' : 'var(--dim)') + '">' +
+      (deep ? '深度清理已开启：卸载结束后删除该软件的个人数据与残留。' : '仅卸载程序，个人数据与残留会保留。') +
+    '</div>' +
     bcuDetailHtml(S.uexec.list, null, true);
   bcuFoot('<button class="btn" disabled>卸载中…</button>');
   $("mClose").style.visibility = "hidden";
   $("modal").classList.add("open");
   bcuSetProgress(3, "正在准备卸载…");
   bcuStartTimer();
-  post({cmd:"bcuUninstall", ids:ids});
+  post({cmd:"bcuUninstall", ids:ids, deep:deep});
 }
 
 function onBcuStart(m){
@@ -2963,10 +2991,18 @@ function onBcuDone(m){
   if(m.remainingNames) result += '<div class="uhint" style="margin-top:5px">仍存在：' + esc(m.remainingNames) + '</div>';
   if(m.regRemoved) result += '<div class="uhint" style="margin-top:5px">已移除失效登记 ' + m.regRemoved + ' 条。</div>';
   if(m.skipped) result += '<div class="uhint" style="margin-top:5px">跳过不可卸载项 ' + m.skipped + ' 个。</div>';
+  var deepText = "";
+  if(m.deep){
+    deepText = m.deepMsg || ("深度清理已执行：" + (m.deepApps || 0) + " 个软件");
+    if(m.deepSkipped) deepText += "；系统组件跳过 " + m.deepSkipped + " 个";
+  } else {
+    deepText = "仅卸载程序，个人数据与残留未清理。";
+  }
   $("mTitle").textContent = m.ok ? "卸载完成" : "卸载未完成";
   $("mBody").innerHTML =
     '<div class="ustat"><span>' + (m.ok ? '卸载完成' : '卸载未完成') + '</span><b id="uPct">100%</b></div>' +
     '<div class="ubar"><i id="uFill" style="width:100%"></i></div>' +
+    '<div class="uhint" style="margin-top:8px;color:' + (m.deep ? 'var(--warn)' : 'var(--dim)') + '">' + esc(deepText) + '</div>' +
     '<div class="grid g2" style="margin:12px 0">' +
       card("卸载结果", (m.ok ? '<span style="color:var(--ok)">完成</span>' : '<span style="color:var(--risk)">未完成</span>'), "") +
       card("选中软件", String(m.total || list.length) + " 个", caution ? caution + " 个谨慎项" : "") +

@@ -343,7 +343,7 @@ namespace WinTune
                     SendAsync(new Func<string>(Apps.RecommendJson), "appsRec");
                     break;
                 case "bcuUninstall":
-                    StartBcuUninstall(Json.StrList(d, "ids"));
+                    StartBcuUninstall(Json.StrList(d, "ids"), Json.Bool(d, "deep"));
                     break;
                 case "appLocation":
                     Send(Apps.OpenLocation(Json.Str(d, "id")));
@@ -533,7 +533,7 @@ namespace WinTune
             string dir = BackupDir();
             Send(new JB()
                 .Add("type", "init")
-                .Add("version", "1.5.43")
+                .Add("version", "1.5.44")
                 .Add("admin", SysInfo.IsAdmin())
                 .Add("osName", SysInfo.OsName())
                 .Add("build", SysInfo.BuildNumber())
@@ -834,12 +834,12 @@ namespace WinTune
             th.Start();
         }
 
-        private void StartBcuUninstall(List<string> ids)
+        private void StartBcuUninstall(List<string> ids, bool deep)
         {
             if (ids == null || ids.Count == 0) return;
             Thread th = new Thread(delegate ()
             {
-                try { Bcu.Uninstall(ids, Send); }
+                try { Bcu.Uninstall(ids, deep, Send); }
                 catch (Exception ex)
                 {
                     Log.Error("bcu", ex.Message);

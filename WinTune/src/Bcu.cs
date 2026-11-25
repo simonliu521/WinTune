@@ -34,7 +34,7 @@ namespace WinTune
         }
 
         /// <summary>只做卸载，不启用 BCU 的 /J 残留清理。</summary>
-        public static void Uninstall(List<string> ids, Action<string> onEvent)
+        public static void Uninstall(List<string> ids, bool deep, Action<string> onEvent)
         {
             if (onEvent == null) onEvent = delegate (string s) { };
 
@@ -149,6 +149,47 @@ namespace WinTune
 
             /* BCU 的 UniversalUninstaller 会删目录，但不一定删除 HKCU/HKLM 里的卸载登记。
                只对本次选中、且安装目录已经不存在的那条登记做精确删除；不扫描其它条目。 */
+            List<Apps.App> after = Apps.List();
+            List<Apps.App> removed = new List<Apps.App>();
+            for (int i = 0; i < targets.Count; i++)
+            {
+                bool still = false;
+                for (int j = 0; j < after.Count; j++)
+                {
+                    if (after[j].Id == targets[i].Id) { still = true; break; }
+                }
+                if (!still) removed.Add(targets[i]);
+            }
+
+            DeepClean.Result dc = null;
+            string deepMsg = "";
+            if (deep)
+            {
+                if (!admin)
+                {
+                    deepMsg = "深度清理需要管理员权限，本次未执行";
+                }
+                else if (exitCode != 0)
+                {
+                    deepMsg = "卸载未成功，本次未执行深度清理";
+                }
+                else if (removed.Count == 0)
+                {
+                    deepMsg = "没有确认已卸载的软件，本次未清理个人数据";
+                }
+                else
+                {
+                    Action<string> dlog = delegate (string s)
+                    {
+                        onEvent(new JB().Add("type", "bcuLine").Add("line", s).End());
+                    };
+                    dc = DeepClean.Run(removed, dlog);
+                    deepMsg = "深度清理 " + dc.Apps + " 个软件，删除目录 " + dc.Dirs
+                        + "、快捷方式 " + dc.Files + "、注册表项 " + dc.Regs
+                        + (dc.Fail > 0 ? "，失败 " + dc.Fail : "");
+                }
+            }
+
             int regRemoved = 0;
             for (int i = 0; i < targets.Count; i++)
             {
@@ -161,7 +202,6 @@ namespace WinTune
                 catch { }
             }
 
-            List<Apps.App> after = Apps.List();
             int remaining = 0;
             StringBuilder remainNames = new StringBuilder();
             for (int i = 0; i < targets.Count; i++)
@@ -183,6 +223,14 @@ namespace WinTune
                 .Add("total", targets.Count).Add("skipped", skipped)
                 .Add("regRemoved", regRemoved).Add("remaining", remaining)
                 .Add("remainingNames", remainNames.ToString())
+                .Add("deep", deep)
+                .Add("deepApps", dc == null ? 0 : dc.Apps)
+                .Add("deepSkipped", dc == null ? 0 : dc.Skipped)
+                .Add("deepDirs", dc == null ? 0 : dc.Dirs)
+                .Add("deepFiles", dc == null ? 0 : dc.Files)
+                .Add("deepRegs", dc == null ? 0 : dc.Regs)
+                .Add("deepFail", dc == null ? 0 : dc.Fail)
+                .Add("deepMsg", deepMsg)
                 .Add("exit", exitCode)
                 .Add("msg", exitCode == 0
                     ? ("BCU 卸载完成" + (remaining > 0 ? "，仍有 " + remaining + " 个条目未消失" : ""))
