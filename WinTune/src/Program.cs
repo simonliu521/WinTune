@@ -193,8 +193,8 @@ namespace WinTune
                 return;
             }
 
-            /* 启动时看一眼 MiniMonitor：进程、PawnIO、温度代理都在就不动；
-               缺什么补什么。退出时不管它。 */
+            /* 启动时先确保 PawnIO 驱动在跑，再拉起 MiniMonitor；
+               缺驱动时的安装提示由 MiniMonitor 自己负责。退出时不管它。 */
             System.Threading.ThreadPool.QueueUserWorkItem(delegate
             {
                 try { MiniBoot.Ensure(); } catch { }

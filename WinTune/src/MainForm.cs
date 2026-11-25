@@ -542,7 +542,7 @@ namespace WinTune
             string dir = BackupDir();
             Send(new JB()
                 .Add("type", "init")
-                .Add("version", "1.5.40")
+                .Add("version", "1.5.41")
                 .Add("admin", SysInfo.IsAdmin())
                 .Add("osName", SysInfo.OsName())
                 .Add("build", SysInfo.BuildNumber())

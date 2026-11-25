@@ -12,8 +12,8 @@ WinTune 是一套面向 Windows 10/11 的系统优化、清理与硬件监控工
 
 | 项目 | 版本 | 说明 |
 |---|---|---|
-| **WinTune** | 1.5.40 | 主程序。WebView2 单文件界面 + C# 引擎，负责扫描、清理、优化、修复、网络诊断和硬件概览。 |
-| **MiniMonitor** | 1.6.13 | 任务栏硬件监控与截图工具。可独立运行，也可从 WinTune 启动；包含管理员温度代理和截图编辑器。 |
+| **WinTune** | 1.5.41 | 主程序。WebView2 单文件界面 + C# 引擎，负责扫描、清理、优化、修复、网络诊断和硬件概览。 |
+| **MiniMonitor** | 1.6.14 | 任务栏硬件监控与截图工具。可独立运行，也可从 WinTune 启动；包含管理员温度代理和截图编辑器。 |
 
 ### WinTune 功能
 
@@ -31,7 +31,7 @@ WinTune 是一套面向 Windows 10/11 的系统优化、清理与硬件监控工
 - **右键菜单**：开机自启、打开 WinTune、清理内存、截图设置、版本和退出。
 - **截图工具**：支持 `Alt+A` 截图、框选、标注、颜色和线条编辑；截图设置与保存目录可调整。
 - **温度代理**：管理员权限的静默代理写入 CPU 温度共享内存；界面关闭不会结束代理，心跳丢失时自动重建界面。
-- **PawnIO 提示**：检测不到 PawnIO 或 CPU 温度时，启动阶段弹窗询问是否运行安装程序；WinTune 概览页也会显示修复入口。
+- **PawnIO 提示**：PawnIO 是内核驱动，检测以服务状态为准。WinTune 启动先确保驱动在跑，再拉起 MiniMonitor；缺驱动且有安装包时，概览页显示「获取温度需安装依赖 PawnIO」。MiniMonitor 启动时也会检测，安装包存在则弹出「安装 / 取消」，安装包不存在时只提示一次。
 
 ### 界面截图
 
@@ -83,8 +83,8 @@ WinTune is a Windows 10/11 system optimization, cleanup, and hardware monitoring
 
 | Project | Version | Description |
 |---|---|---|
-| **WinTune** | 1.5.40 | Main application. A WebView2 single-page UI plus a C# engine for scanning, cleanup, optimization, repair, network diagnostics, and hardware overview. |
-| **MiniMonitor** | 1.6.13 | Taskbar hardware monitor and screenshot tool. Runs independently or from WinTune; includes an elevated temperature agent and screenshot editor. |
+| **WinTune** | 1.5.41 | Main application. A WebView2 single-page UI plus a C# engine for scanning, cleanup, optimization, repair, network diagnostics, and hardware overview. |
+| **MiniMonitor** | 1.6.14 | Taskbar hardware monitor and screenshot tool. Runs independently or from WinTune; includes an elevated temperature agent and screenshot editor. |
 
 ### WinTune features
 
@@ -102,7 +102,7 @@ WinTune is a Windows 10/11 system optimization, cleanup, and hardware monitoring
 - **Context menu**: Start with Windows, open WinTune, clean memory, screenshot settings, version and exit.
 - **Screenshot tool**: `Alt+A` capture, region selection, annotations, colors and line editing; configurable save folder.
 - **Temperature agent**: A silent elevated agent publishes CPU temperature to shared memory; closing the UI does not terminate it, and the UI is recreated if its heartbeat is lost.
-- **PawnIO prompt**: When PawnIO or CPU temperature is unavailable at startup, asks whether to run the installer; WinTune's overview page also exposes a repair entry.
+- **PawnIO prompt**: PawnIO is a kernel driver, so detection follows its service state. WinTune starts the driver first, then launches MiniMonitor. If the driver is missing and an installer exists, the overview page shows “获取温度需安装依赖 PawnIO”. MiniMonitor checks again at startup: with an installer it shows Install / Cancel; without one it prompts only once.
 
 ### Screenshots
 

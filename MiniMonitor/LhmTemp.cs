@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using LibreHardwareMonitor.Hardware;
 
@@ -11,6 +12,9 @@ public static class LhmTemp
     static IHardware cpu;
     static Timer timer;
     static DateTime retryAt = DateTime.MinValue;
+    static bool dumped;
+    static bool sensorDumped;
+    static bool tickLogged;
 
     public static int Last = -1;          // 摄氏度整数，-1 表示暂时读不到
     public static int Cores = -1;         // 核心数，仅用于界面提示
@@ -18,6 +22,7 @@ public static class LhmTemp
     public static void Start()
     {
         if (timer != null) return;
+        MiniMonitor.Trace("lhm start");
         timer = new Timer(Tick, null, 400, 2000);
     }
 
@@ -39,10 +44,23 @@ public static class LhmTemp
         {
             try
             {
+                if (!tickLogged)
+                {
+                    tickLogged = true;
+                    MiniMonitor.Trace("lhm tick enter");
+                }
                 if (pc == null)
                 {
                     if (DateTime.Now < retryAt) return;
-                    Computer c = new Computer { IsCpuEnabled = true };
+                    Computer c = new Computer
+                    {
+                        IsCpuEnabled = true,
+                        IsGpuEnabled = true,
+                        IsMemoryEnabled = true,
+                        IsMotherboardEnabled = true,
+                        IsStorageEnabled = true,
+                        IsControllerEnabled = false
+                    };
                     c.Open();
                     IHardware found = null;
                     foreach (IHardware hw in c.Hardware)
@@ -51,6 +69,7 @@ public static class LhmTemp
                     {
                         c.Close();
                         retryAt = DateTime.Now.AddSeconds(60);
+                        MiniMonitor.Trace("lhm: no cpu hardware");
                         return;
                     }
                     pc = c;
@@ -74,12 +93,27 @@ public static class LhmTemp
 
                 double val = pkg > 0 ? pkg : (max > 0 ? max : (n > 0 ? sum / n : -1));
                 Last = val > 0 ? (int)Math.Round(val) : -1;
+                if (!dumped)
+                {
+                    dumped = true;
+                    MiniMonitor.Trace("lhm first pkg=" + pkg + " max=" + max + " n=" + n + " val=" + val);
+                }
+                if (Last < 0 && !sensorDumped)
+                {
+                    sensorDumped = true;
+                    StringBuilder sb = new StringBuilder();
+                    foreach (ISensor s in cpu.Sensors)
+                        sb.Append(s.SensorType + ":" + s.Name + "=" +
+                            (s.Value.HasValue ? s.Value.Value.ToString("0.##") : "null") + "; ");
+                    MiniMonitor.Trace("lhm sensors: " + sb.ToString());
+                }
                 if (cpu.Sensors != null) Cores = cpu.Sensors.Count(x => x.SensorType == SensorType.Temperature && (x.Name ?? "").StartsWith("CPU Core"));
                 retryAt = DateTime.MinValue;
             }
-            catch
+            catch (Exception ex)
             {
                 Last = -1;
+                MiniMonitor.Trace("lhm error: " + ex.GetType().Name + " " + ex.Message);
                 try { if (pc != null) { pc.Close(); pc = null; } } catch { }
                 try { cpu = null; } catch { }
                 retryAt = DateTime.Now.AddSeconds(30);

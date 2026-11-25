@@ -386,6 +386,8 @@ namespace WinTune
                 .Add("cpuPower", cpuPower)
                 .Add("cpuClock", cpuClock)
                 .Add("pawnio", PawnioInstalled())
+                .Add("pawnioRun", PawnioRunning())
+                .Add("pawnioSetup", FindPawnioSetup().Length > 0)
                 .Add("cores", cores)
                 .Add("memName", memName)
                 .Add("memLoad", memLoad)
@@ -740,6 +742,72 @@ namespace WinTune
             catch { return false; }
         }
 
+        private static DateTime pawnioCheckAt = DateTime.MinValue;
+        private static bool pawnioLastRun;
+
+        /// <summary>
+        /// PawnIO 是内核驱动，不是普通用户态进程；这里以服务状态为准。
+        /// 若极少数环境另有 PawnIO 用户态进程，也一并认作已运行。
+        /// 硬件面板每秒刷新，查询结果缓存 8 秒，避免反复拉起 sc.exe。
+        /// </summary>
+        static bool PawnioRunning()
+        {
+            if ((DateTime.Now - pawnioCheckAt).TotalSeconds < 8) return pawnioLastRun;
+            pawnioCheckAt = DateTime.Now;
+            pawnioLastRun = false;
+            try
+            {
+                foreach (Process p in Process.GetProcessesByName("PawnIO"))
+                {
+                    pawnioLastRun = true;
+                    break;
+                }
+            }
+            catch { }
+            if (pawnioLastRun) return true;
+            try
+            {
+                string sc = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "sc.exe");
+                ProcessStartInfo psi = new ProcessStartInfo(sc, "query PawnIO");
+                psi.UseShellExecute = false;
+                psi.CreateNoWindow = true;
+                psi.RedirectStandardOutput = true;
+                psi.RedirectStandardError = true;
+                using (Process p = Process.Start(psi))
+                {
+                    string o = p.StandardOutput.ReadToEnd();
+                    p.WaitForExit(6000);
+                    pawnioLastRun = o.IndexOf("RUNNING", StringComparison.OrdinalIgnoreCase) >= 0;
+                }
+            }
+            catch { pawnioLastRun = false; }
+            return pawnioLastRun;
+        }
+
+        /// <summary>已安装但服务停了：尝试 sc start；WinTune 自身是管理员，通常直接成功。</summary>
+        static bool StartPawnio()
+        {
+            if (PawnioRunning()) return true;
+            try
+            {
+                string sc = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "sc.exe");
+                ProcessStartInfo psi = new ProcessStartInfo(sc, "start PawnIO");
+                psi.UseShellExecute = false;
+                psi.CreateNoWindow = true;
+                psi.RedirectStandardOutput = true;
+                psi.RedirectStandardError = true;
+                using (Process p = Process.Start(psi)) p.WaitForExit(8000);
+            }
+            catch { }
+            pawnioCheckAt = DateTime.MinValue;
+            for (int i = 0; i < 10; i++)
+            {
+                if (PawnioRunning()) return true;
+                System.Threading.Thread.Sleep(300);
+            }
+            return PawnioRunning();
+        }
+
         /// <summary>找 PawnIO 安装器：优先 MiniMonitor 目录，其次 WinTune 目录和原安装缓存。</summary>
         static string FindPawnioSetup()
         {
@@ -753,9 +821,15 @@ namespace WinTune
             return "";
         }
 
-        /// <summary>运行 PawnIO 安装程序；WinTune 本身是管理员时静默安装，否则走一次 UAC。</summary>
+        /// <summary>启动或安装 PawnIO：已安装但服务停了先 sc start；真缺驱动才运行安装程序。</summary>
         static string InstallPawnio()
         {
+            if (PawnioInstalled())
+            {
+                if (StartPawnio())
+                    return Ok("PawnIO 驱动已启动，CPU 温度会在几秒内刷新");
+            }
+
             string setup = FindPawnioSetup();
             if (setup.Length == 0)
                 return Fail("找不到 PawnIO_setup.exe，请把完整包里的安装程序放回 MiniMonitor 文件夹");
@@ -774,9 +848,10 @@ namespace WinTune
                     psi.Verb = "runas";
                 }
                 using (Process p = Process.Start(psi)) p.WaitForExit(30000);
-                return PawnioInstalled()
-                    ? Ok("PawnIO 安装程序已运行；如果温度仍为空，重新打开 WinTune 再试")
-                    : Fail("安装程序已退出，但没有检测到 PawnIO 服务；请按安装窗口提示完成后重开 WinTune");
+                pawnioCheckAt = DateTime.MinValue;
+                if (PawnioInstalled() && StartPawnio())
+                    return Ok("PawnIO 已安装并运行，CPU 温度会在几秒内刷新");
+                return Fail("安装程序已退出，但没有检测到正在运行的 PawnIO 服务；请按安装窗口提示完成后重开 WinTune");
             }
             catch (Exception ex) { return Fail("运行 PawnIO 安装程序失败：" + ex.Message); }
         }

@@ -31,7 +31,7 @@ WinTune 1.5.40 · 工程说明（交付 / 二次开发请先读这一页）
 
 四、源码地图（22 个文件，按职责分，不互相抢活）
   Program.cs        入口：命令行开关（--selftest / --repairjson / --depsjson / --diag / --elevated）、单实例、依赖自愈后拉起窗口
-  MiniBoot.cs       启动时只检查一次 MiniMonitor：进程/PawnIO/温度代理都在就不动，缺什么补什么；退出不管
+  MiniBoot.cs       启动时只检查一次 MiniMonitor：先确保 PawnIO 驱动在跑（已装但停了就 sc start），再拉起 MiniMonitor；退出不管
   MainForm.cs       窗口与 WebView2 宿主，消息分发（init / hwSample / scan / exec / tweak / maint / repair / upd / deps / mm / net）
   SplashOverlay.cs  启动过渡层：深色底 + W 呼吸 + 旋转弧 + 进度微光，页面导航完成后淡出
   Json.cs           极简 JSON 构建与解析（JB 链式 API + Json.Str/Bool/StrList）
@@ -1134,3 +1134,14 @@ WinTune 1.5.40 · 工程说明（交付 / 二次开发请先读这一页）
   1. 原生卸载：启动官方卸载程序后，前端每 2 秒重新读取一次卸载登记表；该条从列表消失后自动停止轮询，最多 60 秒。
   2. BCU 卸载：完成弹窗原本就会重新读取列表，保持现状。
   3. 不再需要用户卸载完手动点“刷新”。
+四十四、1.5.41 / 1.6.14（PawnIO 启动顺序与依赖提示）
+
+  1. 先说明检测口径：PawnIO 实际是内核驱动服务，不是任务管理器里的用户态进程；代码检测 HKLM\SYSTEM\CurrentControlSet\Services\PawnIO 的服务状态（RUNNING）。
+  2. WinTune 启动：先看 PawnIO；已安装但服务停了就 `sc start PawnIO`，然后再拉起 MiniMonitor。没安装时不在后台静默安装，交给 MiniMonitor 提示。
+  3. 驱动在跑但温度代理任务被删：WinTune 用管理员进程静默执行 MiniMonitor.exe --bootstrap-task，只补任务、不碰 PawnIO，不弹 UAC。
+  4. WinTune 概览：只有“PawnIO 未运行且找到了 PawnIO_setup.exe”才显示提示条。未安装时标题为「获取温度需安装依赖 PawnIO」，按钮「安装」；已装但停了显示「PawnIO 已安装但未运行」，按钮「启动」。点击后启动服务或运行安装程序。
+  5. MiniMonitor 启动：先检测 PawnIO；已在跑就直接采集真实 CPU 温度；已装但停了先 `sc start`；没装或拉不起来才检查安装包。
+  6. 有安装包：弹自定义中文对话框，按钮固定为「安装」「取消」；取消后本次运行不再重复提示。
+  7. 没有安装包：只提示一次，标记写入 %APPDATA%\MiniMonitor\pawnio.noinstaller.prompted，后续开机不再重复。
+  8. 不再因为“温度读不到”弹修复提示：PawnIO 在跑就不再提示。右键菜单保留手动入口：安装温度驱动 / 启动温度驱动 / 修复温度驱动。
+  9. 真实温度：MiniMonitor 代理补齐 LHM 需要的 RAMSPDToolkit-NDD / DiskInfoToolkit / System.Numerics.Vectors 等运行库后，已能读到 CPU Package 温度（本机实测 pkg=39 / max=39 / 12 个核心传感器）；任务栏温度来自管理员代理共享内存。WinTune 硬件面板直接读 LHM，也显示同一颗 CPU 的 Package 温度。

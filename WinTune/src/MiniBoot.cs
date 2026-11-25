@@ -7,42 +7,39 @@ using Microsoft.Win32;
 namespace WinTune
 {
     /// <summary>
-    /// WinTune 启动时只做一次 MiniMonitor 检查：
-    /// 进程在、PawnIO 服务在跑、温度代理任务也在跑，就什么都不做；
-    /// 缺哪一样就补哪一样。WinTune 退出时完全不碰 MiniMonitor。
+    /// WinTune 启动时的依赖启动顺序：
+    /// 1) 先看 PawnIO 驱动服务；已安装但停了就 sc start；
+    /// 2) 再拉起 MiniMonitor。MiniMonitor 自己会再检查一次依赖，并负责缺驱动时的安装提示。
+    /// WinTune 退出时完全不碰 MiniMonitor。
+    /// PawnIO 是内核驱动，任务管理器里通常没有同名进程，所以这里检测的是服务状态。
     /// </summary>
     public static class MiniBoot
     {
         private const string PawnioService = "PawnIO";
-        private const string AgentTask = "MiniMonitorWidget";
 
         public static void Ensure()
         {
             try
             {
                 string exe = Hardware.FindMiniMonitorExe();
-                if (exe.Length == 0) return;
 
-                bool proc = UiRunning();
-                bool driver = ServiceExists();
-                bool driverRun = driver && ServiceRunning();
-                bool task = TaskExists();
-                bool agentRun = task && TaskRunning();
-
-                if (proc && driverRun && task && agentRun) return;   // 都已经在，免打扰
-
-                /* 驱动或任务缺失：交给 MiniMonitor 自己的 --bootstrap 一次补齐。
-                   WinTune 正常是管理员，子进程直接继承权限，不额外弹 UAC。 */
-                if (!driver || !task)
+                /* 已安装但未运行：先启动驱动，再拉起 MiniMonitor。
+                   未安装则不去静默安装，交给 MiniMonitor 的“安装 / 取消”提示。 */
+                bool installed = ServiceExists();
+                bool running = installed && ServiceRunning();
+                if (installed && !running)
                 {
-                    Bootstrap(exe);
-                    if (!proc) StartUi(exe);
-                    return;
+                    ScStart();
+                    running = ServiceRunning();
                 }
 
-                if (!driverRun) ScStart();
-                if (!proc) { StartUi(exe); return; }
-                if (task && !agentRun) Schtasks("/Run /TN \"" + AgentTask + "\"");
+                if (exe.Length == 0) return;
+
+                /* 驱动已经在跑、但温度代理任务被删了：由 WinTune 这个管理员进程静默补建，
+                   不额外弹 UAC，也不碰 PawnIO 安装。 */
+                if (running && !TaskExists()) BootstrapTask(exe);
+
+                if (!UiRunning()) StartUi(exe);
             }
             catch { }
         }
@@ -78,38 +75,26 @@ namespace WinTune
 
         private static bool TaskExists()
         {
-            return Run(Sys("schtasks.exe"), "/Query /TN \"" + AgentTask + "\"", 8000) == 0;
+            return Run(Sys("schtasks.exe"), "/Query /TN \"MiniMonitorWidget\"", 8000) == 0;
         }
 
-        private static bool TaskRunning()
+        private static void BootstrapTask(string exe)
         {
-            string o = Capture(Sys("schtasks.exe"), "/Query /TN \"" + AgentTask + "\" /FO LIST", 8000);
-            return o.IndexOf("Running", StringComparison.OrdinalIgnoreCase) >= 0
-                || o.IndexOf("正在运行", StringComparison.Ordinal) >= 0;
+            try
+            {
+                ProcessStartInfo psi = new ProcessStartInfo(exe, "--bootstrap-task");
+                psi.UseShellExecute = false;
+                psi.CreateNoWindow = true;
+                psi.WindowStyle = ProcessWindowStyle.Hidden;
+                psi.WorkingDirectory = Path.GetDirectoryName(exe);
+                using (Process p = Process.Start(psi)) p.WaitForExit(15000);
+            }
+            catch { }
         }
 
         private static void ScStart()
         {
             Run(Sys("sc.exe"), "start " + PawnioService, 8000);
-        }
-
-        private static void Schtasks(string args)
-        {
-            Run(Sys("schtasks.exe"), args, 8000);
-        }
-
-        private static void Bootstrap(string exe)
-        {
-            try
-            {
-                ProcessStartInfo psi = new ProcessStartInfo(exe, "--bootstrap");
-                psi.UseShellExecute = false;
-                psi.CreateNoWindow = true;
-                psi.WindowStyle = ProcessWindowStyle.Hidden;
-                psi.WorkingDirectory = Path.GetDirectoryName(exe);
-                Process.Start(psi);
-            }
-            catch { }
         }
 
         private static void StartUi(string exe)

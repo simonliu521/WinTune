@@ -136,7 +136,7 @@ public class MiniMonitor : Form
 
     // 程序自己的版本号：这是唯一的版本来源，启动时写进同目录 MiniMonitor.config 的 appSettings。
     // 外部程序（WinTune 等）读那个配置文件就能拿到这里的真实版本，升级本程序只需改这一行再编译。
-    public const string AppVersion = "1.6.13";
+    public const string AppVersion = "1.6.14";
 
     /// <summary>把 AppVersion / 构建日期写进 exe 同目录的 MiniMonitor.config（appSettings 段）。
     /// 写不进去（例如装在 Program Files 无写权限）就静默跳过，配置里保留打包时的值。</summary>
@@ -340,6 +340,50 @@ public class MiniMonitor : Form
         catch { return false; }
     }
 
+    // PawnIO 实际是内核驱动，不是任务栏里的用户态进程；以服务 RUNNING 为准。
+    // 如果个别环境另有 PawnIO 用户态程序，也认作已运行。
+    static bool PawnioRunning()
+    {
+        try
+        {
+            if (Process.GetProcessesByName("PawnIO").Length > 0) return true;
+            string sc = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "sc.exe");
+            ProcessStartInfo psi = new ProcessStartInfo(sc, "query PawnIO");
+            psi.UseShellExecute = false;
+            psi.CreateNoWindow = true;
+            psi.RedirectStandardOutput = true;
+            psi.RedirectStandardError = true;
+            using (Process p = Process.Start(psi))
+            {
+                string o = p.StandardOutput.ReadToEnd();
+                p.WaitForExit(6000);
+                return o.IndexOf("RUNNING", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+        }
+        catch { return false; }
+    }
+
+    // 已安装但服务停了：先静默 sc start；普通权限被拒时再走一次 UAC。
+    static bool StartPawnio()
+    {
+        if (PawnioRunning()) return true;
+        if (!PawnioInstalled()) return false;
+        string sc = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "sc.exe");
+        RunHidden(sc, "start PawnIO");
+        for (int i = 0; i < 12; i++)
+        {
+            if (PawnioRunning()) return true;
+            System.Threading.Thread.Sleep(500);
+        }
+        if (!Elevated) RunElevated(sc, "start PawnIO");
+        for (int i = 0; i < 12; i++)
+        {
+            if (PawnioRunning()) return true;
+            System.Threading.Thread.Sleep(500);
+        }
+        return PawnioRunning();
+    }
+
     void ShowWidgetMenu(Point clientPt)
     {
         try
@@ -377,18 +421,27 @@ public class MiniMonitor : Form
         // 截图设置下面直接给出当前版本号；只是信息行，不带图标、点了就收菜单
         list.Add(new PopMenu.MItem("版本　" + AppVersion, -1, null));
 
-        // 没装 PawnIO 驱动时给个一键入口（包里带了开源安装器）
+        // 右键只保留手动入口：没装 → 安装；已装但停了 → 启动；驱动在跑但确实没温度 → 修复。
         try
         {
             string setup = Path.Combine(Path.GetDirectoryName(Application.ExecutablePath), "PawnIO_setup.exe");
             if (!PawnioInstalled() && File.Exists(setup))
             {
-                list.Add(new PopMenu.MItem("装温度驱动", 3, delegate
+                list.Add(new PopMenu.MItem("安装温度驱动", 3, delegate
                 {
                     bool ok = RunElevated(Application.ExecutablePath, "--bootstrap");
                     MessageBox.Show(ok
                         ? "温度驱动和后台代理都装好了，几秒内 CPU 温度就会出来。"
                         : "安装被取消了，CPU 温度会一直是 --。",
+                        "MiniMonitor", MessageBoxButtons.OK, ok ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                }));
+            }
+            else if (PawnioInstalled() && !PawnioRunning())
+            {
+                list.Add(new PopMenu.MItem("启动温度驱动", 3, delegate
+                {
+                    bool ok = StartPawnio();
+                    MessageBox.Show(ok ? "PawnIO 驱动已启动。" : "PawnIO 驱动没有启动成功，可能需要管理员授权。",
                         "MiniMonitor", MessageBoxButtons.OK, ok ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
                 }));
             }
@@ -1136,11 +1189,71 @@ public class MiniMonitor : Form
         });
     }
 
-    // 启动自检：依赖的文件、PawnIO 驱动、计划任务、温度代理，缺哪个就补哪个。
-    // 温度链路已经通的时候什么都不做；只有真读不到温度才会去装驱动/建任务/拉起代理。
-    // 运行中每 75 秒允许复查一次：任务被删、驱动被停都能自己回来；UAC 引导 5 分钟内只尝试一次，避免反复弹。
+    // 启动自检按“依赖是否存在”走，不再按“温度读没读到”走：
+    // PawnIO 在跑 → 直接采集；已装但停了 → 先启动；没装/拉不起来 → 看安装包，弹“安装 / 取消”。
+    // 安装包也没有时只提示一次，避免每次开机重复打扰。温度正常时不会出现任何修复提醒。
     DateTime lastDepCheck = DateTime.MinValue;
-    DateTime lastInstallPrompt = DateTime.MinValue;
+    bool pawnioPrompted;
+
+    static string NoInstallerMarker()
+    {
+        return Path.Combine(RepairStateDir(), "pawnio.noinstaller.prompted");
+    }
+
+    static bool NoInstallerPrompted()
+    {
+        try { return File.Exists(NoInstallerMarker()); }
+        catch { return false; }
+    }
+
+    static void MarkNoInstallerPrompted()
+    {
+        try
+        {
+            Directory.CreateDirectory(RepairStateDir());
+            File.WriteAllText(NoInstallerMarker(), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+        }
+        catch { }
+    }
+
+    // 必须两个中文按钮：安装 / 取消。MessageBox 的“是/否”不符合要求。
+    static bool PromptPawnioInstall()
+    {
+        using (Form f = new Form())
+        {
+            f.Text = "MiniMonitor";
+            f.FormBorderStyle = FormBorderStyle.FixedDialog;
+            f.StartPosition = FormStartPosition.CenterScreen;
+            f.ClientSize = new Size(380, 158);
+            f.MaximizeBox = false;
+            f.MinimizeBox = false;
+            f.ShowInTaskbar = true;
+            f.TopMost = true;
+            f.Font = SystemFonts.MessageBoxFont;
+
+            Label lb = new Label();
+            lb.Text = "需要安装依赖 PawnIO，安装后才能读取真实 CPU 温度。\n\n是否现在安装？";
+            lb.SetBounds(16, 16, 348, 76);
+            f.Controls.Add(lb);
+
+            Button ok = new Button();
+            ok.Text = "安装";
+            ok.DialogResult = DialogResult.OK;
+            ok.SetBounds(186, 112, 80, 28);
+            f.Controls.Add(ok);
+
+            Button cancel = new Button();
+            cancel.Text = "取消";
+            cancel.DialogResult = DialogResult.Cancel;
+            cancel.SetBounds(284, 112, 80, 28);
+            f.Controls.Add(cancel);
+
+            f.AcceptButton = ok;
+            f.CancelButton = cancel;
+            return f.ShowDialog() == DialogResult.OK;
+        }
+    }
+
     void DependencyCheck()
     {
         if ((DateTime.Now - lastDepCheck).TotalSeconds < 75) return;
@@ -1151,8 +1264,7 @@ public class MiniMonitor : Form
             {
                 System.Threading.Thread.Sleep(2500);
                 string dir = Path.GetDirectoryName(Application.ExecutablePath);
-                // 温度链路真正需要的只有这 5 个 dll；配置文件（MiniMonitor.config）只管版本号，
-                // 缺了不影响读温度，所以不放进这份清单，免得误报"CPU 温度会读不到"。
+                // 温度链路真正需要的只有这 5 个 dll；配置文件（MiniMonitor.config）只管版本号。
                 string[] need = { "LibreHardwareMonitorLib.dll", "PawnIOLib.dll", "System.Memory.dll",
                                   "System.Buffers.dll", "System.Runtime.CompilerServices.Unsafe.dll" };
                 string miss = "";
@@ -1168,110 +1280,67 @@ public class MiniMonitor : Form
                     });
                 }
 
-                // 代理刚启动那几秒可能还没出值，先给 8 秒观察窗口，别误判成"没依赖"
-                bool ok = false;
-                for (int i = 0; i < 5; i++)
+                bool installed = PawnioInstalled();
+                bool running = installed && PawnioRunning();
+
+                // 已安装但服务停了：先尝试拉起，不打扰用户。
+                if (installed && !running)
                 {
-                    // cpuTemp 包含 ACPI/PDH 兜底值；界面已经有温度时，不要再弹“读不到温度”的提示。
-                    if (TempBus.Read() > 0 || LhmTemp.Last > 0 || cpuTemp > 0) { ok = true; break; }
-                    System.Threading.Thread.Sleep(1600);
+                    try { Log("dep: start pawnio"); } catch { }
+                    running = StartPawnio();
                 }
-                if (ok) return;                                          // 温度已经能读到，不打扰
 
-                // 驱动或计划任务缺任意一个，先明确提示用户运行安装程序；
-                // 不再静默 bootstrap，避免用户不知道为什么会弹 UAC。
-                if (!PawnioInstalled() || !TaskReady())
+                if (!running)
                 {
-                    if ((DateTime.Now - lastInstallPrompt).TotalSeconds < 300) return;   // 5 分钟内不重复提示
-                    lastInstallPrompt = DateTime.Now;
-                    try { Log("dep: prompt install"); } catch { }
-
                     string setup = InstallerPath();
                     if (setup.Length == 0)
                     {
-                        BeginInvoke((Action)delegate
+                        // 没有安装包：只提示一次，写持久标记，下次开机不再弹。
+                        if (!NoInstallerPrompted())
                         {
-                            MessageBox.Show("未检测到 PawnIO 驱动，CPU 温度无法显示。\n\n" +
-                                "程序目录里也没有 PawnIO_setup.exe，请把完整包里的安装程序放回 MiniMonitor 目录后重试。",
-                                "MiniMonitor", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        });
+                            MarkNoInstallerPrompted();
+                            try { Log("dep: no installer, prompt once"); } catch { }
+                            BeginInvoke((Action)delegate
+                            {
+                                MessageBox.Show("未检测到可运行的 PawnIO，程序目录里也没有 PawnIO_setup.exe。\n\n" +
+                                    "CPU 温度无法读取；请把完整包里的安装程序放回 MiniMonitor 目录。",
+                                    "MiniMonitor", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            });
+                        }
                         return;
                     }
 
-                    bool yes = false;
+                    // 有安装包：本次运行只弹一次“安装 / 取消”。
+                    if (pawnioPrompted) return;
+                    pawnioPrompted = true;
+                    try { Log("dep: prompt install"); } catch { }
+
+                    bool install = false;
                     var done = new System.Threading.ManualResetEvent(false);
-                    string why = !PawnioInstalled()
-                        ? "未检测到 PawnIO 驱动，CPU 温度无法显示。"
-                        : "温度代理任务缺失，CPU 温度无法显示。";
                     BeginInvoke((Action)delegate
                     {
-                        yes = MessageBox.Show(why + "\n\n是否现在运行 PawnIO 安装程序？\n（会弹一次 UAC，装完自动重新检测）",
-                            "MiniMonitor", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
+                        install = PromptPawnioInstall();
                         done.Set();
                     });
                     done.WaitOne(30000);
-                    if (!yes) return;
+                    if (!install) return;
+
                     try { Log("dep: run installer"); } catch { }
                     RunElevated(Application.ExecutablePath, "--bootstrap");
                     return;
                 }
 
-                // 驱动和任务都在，只是代理没跑（比如刚开机任务延迟中），直接拉一次；拉完再等温度。
-                if (!AgentTaskRunning()) RunSchtasks("/Run /TN \"" + TaskName + "\"");
-                try { Log("dep: agent started"); } catch { }
-                for (int i = 0; i < 4; i++)
+                // PawnIO 已在跑：只保证温度代理任务在，不再因为“温度读不到”弹修复提示。
+                if (!TaskReady())
                 {
-                    if (TempBus.Read() > 0 || LhmTemp.Last > 0 || cpuTemp > 0) return;
-                    System.Threading.Thread.Sleep(1500);
-                }
-
-                // 驱动装了但温度仍读不到：提示重装/修复 PawnIO，不再无声无息。
-                // 上次修复失败后 7 天内不再每次开机弹；右键菜单仍可手动重试。
-                if ((DateTime.Now - lastInstallPrompt).TotalSeconds < 300) return;
-                if (RepairFailedRecently()) return;
-                lastInstallPrompt = DateTime.Now;
-                string installer = InstallerPath();
-                if (installer.Length == 0)
-                {
-                    BeginInvoke((Action)delegate
-                    {
-                        MessageBox.Show("PawnIO 已安装，但 CPU 温度仍读不到，且程序目录里没有 PawnIO_setup.exe。\n\n" +
-                            "请把完整包里的 PawnIO_setup.exe 放回 MiniMonitor 目录后重试。",
-                            "MiniMonitor", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    });
+                    // 任务缺失时后台补建；可能弹一次 UAC，但不是“缺驱动”的提示。
+                    RunElevated(Application.ExecutablePath, "--bootstrap");
                     return;
                 }
-                bool repair = false;
-                var wait = new System.Threading.ManualResetEvent(false);
-                BeginInvoke((Action)delegate
+                if (!AgentTaskRunning())
                 {
-                    repair = MessageBox.Show("PawnIO 已安装，但 CPU 温度仍读不到。\n\n是否运行 PawnIO 安装程序修复驱动？",
-                        "MiniMonitor", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
-                    wait.Set();
-                });
-                wait.WaitOne(30000);
-                if (repair)
-                {
-                    try { Log("dep: repair install"); } catch { }
-                    bool repaired = RunElevated(Application.ExecutablePath, "--bootstrap --repair");
-                    string result = "";
-                    try
-                    {
-                        string f = Path.Combine(RepairStateDir(), "repair.result");
-                        if (File.Exists(f)) result = File.ReadAllText(f).Trim();
-                    }
-                    catch { }
-                    BeginInvoke((Action)delegate
-                    {
-                        if (!repaired) MessageBox.Show("驱动修复没有完成：可能取消了管理员授权，或安装程序启动失败。\n\n" +
-                            "可以右键任务栏 MiniMonitor →「修复温度驱动」再试一次。",
-                            "MiniMonitor", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        else if (result == "ok") MessageBox.Show("PawnIO 驱动已重装，温度代理已重启。\n\n几秒内 CPU 温度应该会恢复；如果仍是旧值，请完全退出 MiniMonitor 再打开。",
-                            "MiniMonitor", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        else MessageBox.Show("PawnIO 驱动已重装，但温度代理仍未写出 CPU 温度。\n\n" +
-                            "这通常不是缺少 PawnIO_setup.exe，而是当前硬件库读不到这颗 CPU。已暂停 7 天内的重复提示，可右键菜单手动重试。",
-                            "MiniMonitor", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    });
+                    RunSchtasks("/Run /TN \"" + TaskName + "\"");
+                    try { Log("dep: agent started"); } catch { }
                 }
             }
             catch { }
@@ -1675,8 +1744,13 @@ public class MiniMonitor : Form
 
     static bool EnsurePawnio(bool force)
     {
-        // force=true 用于“驱动登记还在、但温度读不到”的修复：不能因为注册表键存在就直接返回。
-        if (!force && PawnioInstalled()) { StashInstaller(); return true; }
+        // force=true 用于“驱动登记还在、但温度读不到”的手动修复：不能因为注册表键存在就直接返回。
+        if (!force && PawnioInstalled())
+        {
+            StashInstaller();
+            if (PawnioRunning()) return true;
+            return StartPawnio();
+        }
         try
         {
             string setup = InstallerPath();
@@ -1688,11 +1762,31 @@ public class MiniMonitor : Form
             {
                 p.WaitForExit(60000);
                 bool ok = PawnioInstalled() && p.ExitCode == 0;
-                if (ok) StashInstaller();
+                if (ok)
+                {
+                    StashInstaller();
+                    ok = PawnioRunning() || StartPawnio();
+                }
                 return ok;
             }
         }
         catch { return false; }
+    }
+
+    // 只建温度代理任务：由 WinTune（管理员）在启动时调用，不碰 PawnIO、不弹 UAC。
+    static void BootstrapTask()
+    {
+        string tmp = Path.Combine(Path.GetTempPath(), "MiniMonitorTask.xml");
+        try
+        {
+            File.WriteAllText(tmp, BuildTaskXml(), Encoding.Unicode);
+            RunHidden("schtasks.exe", "/Create /TN \"" + TaskName + "\" /XML \"" + tmp + "\" /F");
+            try { File.Delete(tmp); } catch { }
+            RunHidden("schtasks.exe", "/End /TN \"" + TaskName + "\"");
+            RunHidden("schtasks.exe", "/Run /TN \"" + TaskName + "\"");
+        }
+        catch { }
+        Environment.Exit(0);
     }
 
     // 一次性引导：界面用 runas 调起本模式，只弹一次 UAC，驱动和计划任务一起弄好
@@ -1776,7 +1870,7 @@ public class MiniMonitor : Form
     }
 
     // 以管理员身份跑一条命令（弹一次 UAC），用于建/删最高权限任务
-    bool RunElevated(string file, string args)
+    static bool RunElevated(string file, string args)
     {
         try
         {
@@ -1837,7 +1931,7 @@ public class MiniMonitor : Form
     }
 
     // 温度代理是静态方法，不能调用界面的实例 Log；这里单独写一份 trace。
-    static void Trace(string s)
+    public static void Trace(string s)
     {
         try
         {
@@ -1860,6 +1954,7 @@ public class MiniMonitor : Form
 
         // 代理本身是最高权限：驱动没装就静默补上，避免新机器只显示 --
         EnsurePawnio(false);
+        Trace("agent start admin=" + Elevated + " pawnio=" + PawnioRunning());
         LhmTemp.Start();
         TempBus.Create();
         if (TempBus.StopRequested()) { try { LhmTemp.Stop(); } catch { } return; }   // 主程序正在退出，不再拉起界面
@@ -1875,13 +1970,18 @@ public class MiniMonitor : Form
         {
             try { TempBus.Publish(LhmTemp.Last); } catch { }
             try { if (TempBus.TakeOpenWinTuneRequest()) LaunchWinTuneElevated(); } catch { }
-            // 温度一直读不到时，看看 PawnIO 驱动服务是不是被停掉了（代理本身是管理员，能直接拉起来）
+            // 温度一直读不到、且 PawnIO 服务确实没在跑时，代理（管理员）直接拉起来。
+            // 驱动已在运行时不再每 10 秒空跑一次 sc start。
             if (LhmTemp.Last > 0) miss = 0;
-            else if (++miss >= 10)
+            else if (!PawnioRunning())
             {
-                miss = 0;
-                RunHidden("sc.exe", "start PawnIO");
+                if (++miss >= 10)
+                {
+                    miss = 0;
+                    RunHidden("sc.exe", "start PawnIO");
+                }
             }
+            else miss = 0;
             // 界面心跳：界面被任务管理器杀掉、崩了，代理把界面重新拉起来；
             // 只有界面点「退出」写了 stop 标志，代理才真正收手。WinTune 关闭不参与这条链路。
             long hb = 0;
@@ -1960,11 +2060,13 @@ public class MiniMonitor : Form
 
         bool isAgent = false;
         bool isBootstrap = false;
+        bool isBootstrapTask = false;
         bool isRepair = false;
         if (args != null) foreach (string a in args)
         {
             if (a == "--agent") isAgent = true;
             if (a == "--bootstrap") isBootstrap = true;
+            if (a == "--bootstrap-task") isBootstrapTask = true;
             if (a == "--repair") isRepair = true;
         }
 
@@ -1986,6 +2088,9 @@ public class MiniMonitor : Form
 
         // 管理员引导模式：装驱动 + 建自启任务 + 拉起代理，完事就退
         if (isBootstrap) { Bootstrap(isRepair); return; }
+
+        // WinTune 已是管理员：只补建温度代理任务，不碰 PawnIO，避免额外 UAC 或静默安装。
+        if (isBootstrapTask) { BootstrapTask(); return; }
 
         // 界面模式：普通权限运行，才能挂成任务栏的子窗口
         bool uiCreated = false;

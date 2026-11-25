@@ -534,10 +534,10 @@ pre.details{max-height:150px;overflow:auto;background:#1b232d;border:1px solid v
         <div class="pagehead"><h2>概览</h2><p>这一页汇总整台电脑的实时状况：处理器、内存、硬盘的占用与温度，系统与依赖组件是否就绪，以及随软件附带的 MiniMonitor 截图设置。从左侧往下就是清理残留、整理注册表与启动项、修复系统组件；每一处改动前都会先写备份，随时可以回滚。</p></div>
         <div id="pawnioWarn" style="display:none;margin:0 0 16px;padding:12px 16px;border:1px solid rgba(232,178,74,.35);border-radius:10px;background:rgba(232,178,74,.08);align-items:center;gap:14px">
           <div style="flex:1">
-            <b style="color:var(--warn)">CPU 温度不可用</b>
+            <b id="pawnioTitle" style="color:var(--warn)">获取温度需安装依赖 PawnIO</b>
             <div id="pawnioWarnText" style="margin-top:4px;color:var(--muted);font-size:12px"></div>
           </div>
-          <button class="btn pri" onclick="installPawnio()">运行 PawnIO 安装程序</button>
+          <button id="pawnioBtn" class="btn pri" onclick="installPawnio()">安装</button>
         </div>
         <div class="hero" id="ovHero">
           <div>
@@ -1874,14 +1874,19 @@ function kpiPatch(){
     : (m.admin ? "传感器未返回读数" : "需要管理员运行")));
   var pw = $("pawnioWarn");
   if(pw){
-    var needPawnio = !!(m.admin && hw.memTotalMb > 0 && hw.time && !hasTemp);
+    var needPawnio = !!(m.admin && hw.memTotalMb > 0 && hw.time && hw.pawnioSetup && !hw.pawnioRun);
     pw.style.display = needPawnio ? "flex" : "none";
     if(needPawnio){
+      var title = hw.pawnio ? "PawnIO 已安装但未运行" : "获取温度需安装依赖 PawnIO";
       var txt = hw.pawnio
-        ? "PawnIO 已安装，但传感器仍未返回 CPU 温度。可运行安装程序修复；若仍无效，可能是主板温控芯片不被支持。"
-        : "未检测到 PawnIO 驱动，CPU 温度无法显示。运行安装程序后会自动重新检测。";
+        ? "PawnIO 驱动服务当前没有运行，启动后才能读取真实 CPU 温度。"
+        : "检测到 PawnIO 安装程序，点击右侧按钮启动安装。";
       var node = $("pawnioWarnText");
       if(node && node.textContent !== txt) node.textContent = txt;
+      var t = $("pawnioTitle");
+      if(t && t.textContent !== title) t.textContent = title;
+      var b = $("pawnioBtn");
+      if(b && b.textContent !== (hw.pawnio ? "启动" : "安装")) b.textContent = hw.pawnio ? "启动" : "安装";
     }
   }
   setHtml("kpDisk", m.disk ? (m.disk.usedGB + "<span>/ " + m.disk.totalGB + " GB</span>") : "—");
@@ -2154,7 +2159,13 @@ function onMm(m){
     '</div>';
 }
 function mmSet(k, v){ post({cmd:"mmSet", key:k, value:String(v)}); }
-function installPawnio(){ toast("正在运行 PawnIO 安装程序…"); mmSet("pawnio", "1"); setTimeout(loadHw, 6000); }
+function installPawnio(){
+  var hw = S.hw || {};
+  toast(hw.pawnio ? "正在启动 PawnIO 驱动…" : "正在运行 PawnIO 安装程序…");
+  mmSet("pawnio", "1");
+  setTimeout(loadHw, 6000);
+  setTimeout(loadHw, 12000);
+}
 function mmKey(){ mmSet("hotkey", $("mmHot").value); }
 function mmDir(){ mmSet("savedir", $("mmDir").value); }
 function mmShot(on){ mmSet("shot", on ? "1" : "0"); }
@@ -2175,7 +2186,7 @@ function onDeps(d){
     h += '<div class="kv"><span>' + it.n + ' <i style="color:var(--dim);font-style:normal">' + it.d + '</i></span>' +
       (ok ? '<b style="color:var(--ok)">已就绪</b>' : '<b style="color:var(--warn)">自动补装中</b>') + '</div>';
   });
-  h += '<div class="kv"><span>软件版本</span><b>' + esc((S.sys && S.sys.version) || "1.5.40") + '</b></div>';
+  h += '<div class="kv"><span>软件版本</span><b>' + esc((S.sys && S.sys.version) || "1.5.41") + '</b></div>';
   box.innerHTML = h;
 }
 
