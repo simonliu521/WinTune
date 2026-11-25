@@ -63,10 +63,12 @@ namespace WinTune
         /// <summary>生效方式：0 立即生效；1 需重启资源管理器；2 需重启系统。</summary>
         private static int EffOf(string id)
         {
-            if (id == "classicmenu" || id == "copilot") return 1;
+            if (id == "classicmenu" || id == "copilot" ||
+                id == "clocksec" || id == "clockweekday" || id == "windowanim") return 1;
             if (id == "faststart" || id == "ntfsaccess" || id == "searchindex" ||
                 id == "smb1" || id == "llmnr" || id == "recall" ||
-                id == "bitlocker" || id == "wpbt") return 2;
+                id == "bitlocker" || id == "wpbt" ||
+                id == "startupdelay" || id == "lockscreen") return 2;
             return 0;
         }
 
@@ -155,11 +157,64 @@ namespace WinTune
             return o;
         }
 
+        /// <summary>
+        /// 任务栏日期读的是 HKCU 的 sShortDate。默认形如 yyyy/MM/dd，
+        /// 在前面补 dddd 就会显示完整星期；已经带 ddd/dddd 的格式不再重复加。
+        /// </summary>
+        private static string ShortDateTarget()
+        {
+            string s = "";
+            try
+            {
+                using (RegistryKey k = Registry.CurrentUser.OpenSubKey(@"Control Panel\International", false))
+                {
+                    if (k != null)
+                    {
+                        object v = k.GetValue("sShortDate", null);
+                        if (v != null) s = Convert.ToString(v).Trim();
+                    }
+                }
+            }
+            catch { }
+            if (s.Length == 0) s = "yyyy/MM/dd";
+            if (s.IndexOf("ddd", StringComparison.OrdinalIgnoreCase) >= 0) return s;
+            return "dddd " + s;
+        }
+
+        /// <summary>
+        /// 关闭“任务栏显示星期”时，把 sShortDate 里的 ddd / dddd 去掉。
+        /// 不依赖 state.tsv：这项可能在 WinTune 之外已经被手动改过。
+        /// </summary>
+        private static bool RemoveWeekday()
+        {
+            try
+            {
+                using (RegistryKey k = Registry.CurrentUser.OpenSubKey(@"Control Panel\International", true))
+                {
+                    if (k == null) return false;
+                    object v = k.GetValue("sShortDate", null);
+                    string s = v == null ? "" : Convert.ToString(v);
+                    string clean = s.Replace("dddd", "").Replace("ddd", "").Trim();
+                    clean = clean.Replace("  ", " ").Trim();
+                    if (clean.Length == 0) clean = "yyyy/MM/dd";
+                    k.SetValue("sShortDate", clean, RegistryValueKind.String);
+                    return true;
+                }
+            }
+            catch (Exception ex) { Log.Warn("tweak", "恢复任务栏星期失败：" + ex.Message); return false; }
+        }
+
         private static List<Tweak> Build()
         {
             List<Tweak> l = new List<Tweak>();
             const string CDM = @"Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager";
             const string ADV = @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
+
+            /* —— 安全与授权 —— */
+            l.Add(T("uacsecure", "安全", "关闭 UAC 安全桌面",
+                "UAC 仍然开启，只把授权弹窗从独立安全桌面移到当前桌面。远程桌面 / 串流时点“是”不再黑屏、不再卡住。" +
+                "代价是弹窗与普通程序同屏，隔离性下降；单机自用可开，公用电脑或经常运行不明程序不建议。", 3, false,
+                Dw("HKLM", @"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System", "PromptOnSecureDesktop", 0)));
 
             /* —— 隐私与遥测 —— */
             l.Add(E(T("telemetry", "隐私", "关闭诊断数据上报",
@@ -181,6 +236,13 @@ namespace WinTune
                 "不再弹“反馈中心”邀请，也不收集使用习惯数据。", 1, false,
                 Dw("HKLM", @"SOFTWARE\Policies\Microsoft\Windows\DataCollection", "DoNotShowFeedbackNotifications", 1),
                 Dw("HKCU", @"Software\Microsoft\Siuf\Rules", "NumberOfSIUFInPeriod", 0)));
+            l.Add(T("errorreport", "隐私", "关闭 Windows 错误报告",
+                "程序崩溃后不再生成并上报错误报告，减少崩溃后的磁盘写入与联网动作。排查蓝屏、崩溃原因时会少一份 WER 记录。",
+                1, false,
+                Dw("HKLM", @"SOFTWARE\Microsoft\Windows\Windows Error Reporting", "Disabled", 1)));
+            l.Add(T("ceip", "隐私", "关闭客户体验改善计划",
+                "退出 Windows CEIP，不再上传使用习惯与诊断样本；不影响安全更新和错误代码。", 1, false,
+                Dw("HKLM", @"SOFTWARE\Policies\Microsoft\SQMClient\Windows", "CEIPEnable", 0)));
             l.Add(T("tips", "隐私", "关闭系统提示与建议",
                 "关掉设置页、开始菜单里的“提示/建议/新功能推荐”推送。", 1, false,
                 Dw("HKCU", CDM, "SoftLandingEnabled", 0),
@@ -264,6 +326,11 @@ namespace WinTune
                 Dw("HKCU", @"System\GameConfigStore", "GameDVR_FSEBehaviorMode", 2),
                 Dw("HKCU", @"System\GameConfigStore", "GameDVR_HonorUserFSEBehaviorMode", 1),
                 Dw("HKCU", @"System\GameConfigStore", "GameDVR_DXGIHonorFSEWindowsCompatible", 1)));
+            l.Add(T("startupdelay", "性能", "去掉开机启动项延迟",
+                "登录后不再等系统“空闲”才拉起启动项，开机后程序更快出现。低配机同时启动多个程序时，进入桌面瞬间会更忙。",
+                2, true,
+                Dw("HKCU", @"Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize", "StartupDelayInMSec", 0),
+                Dw("HKCU", @"Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize", "WaitForIdleState", 0)));
 
             /* —— 界面与操作 —— */
             l.Add(T("showext", "界面", "显示文件扩展名",
@@ -273,8 +340,12 @@ namespace WinTune
                 "显示隐藏项（系统文件仍隐藏），排查残留与配置时必需。日常使用会显得目录更乱。", 2, false,
                 Dw("HKCU", ADV, "Hidden", 1)));
             l.Add(T("clocksec", "界面", "任务栏时钟显示秒",
-                "时钟精确到秒，方便对时间敏感的操作。", 1, false,
+                "时钟精确到秒，方便对时间敏感的操作；需要重启资源管理器才刷新。", 1, false,
                 Dw("HKCU", ADV, "ShowSecondsInSystemClock", 1)));
+            l.Add(T("clockweekday", "界面", "任务栏时钟显示星期",
+                "在任务栏日期前加完整星期（如“星期三 2026/11/25”）。日期格式是全系统共用，资源管理器和部分程序里的短日期也会跟着变长。",
+                1, false,
+                Sz("HKCU", @"Control Panel\International", "sShortDate", ShortDateTarget())));
             l.Add(T("openpc", "界面", "打开资源管理器默认进此电脑",
                 "不再停在“快速访问/主页”，直接看盘符。", 1, false,
                 Dw("HKCU", ADV, "LaunchTo", 1)));
@@ -313,6 +384,16 @@ namespace WinTune
             l.Add(T("visualfx", "界面", "视觉效果设为最佳性能",
                 "关闭窗口动画、淡入淡出与阴影，老机器与远程桌面下更跟手；观感会变朴素。", 2, false,
                 Dw("HKCU", @"Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects", "VisualFXSetting", 2)));
+            l.Add(T("transparency", "界面", "关闭透明与模糊效果",
+                "任务栏、开始菜单不再半透明/模糊，减少 GPU 合成。老机、远程桌面更省资源，观感会变朴素。", 1, false,
+                Dw("HKCU", @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "EnableTransparency", 0)));
+            l.Add(T("windowanim", "界面", "关闭窗口动画",
+                "最小化、最大化、关闭窗口不再播放缩放动画，切换更干脆；观感会变生硬。", 1, false,
+                Sz("HKCU", @"Control Panel\Desktop\WindowMetrics", "MinAnimate", "0")));
+            l.Add(T("lockscreen", "界面", "跳过锁屏界面",
+                "开机或唤醒后直接到登录界面，不再先显示锁屏壁纸；仍然需要输入密码/PIN。适合远程机和固定桌面。",
+                2, true,
+                Dw("HKLM", @"SOFTWARE\Policies\Microsoft\Windows\Personalization", "NoLockScreen", 1)));
 
             /* —— 搜索与网页结果 —— */
             l.Add(T("bingsearch", "搜索", "关闭开始菜单的网络搜索结果",
@@ -617,6 +698,12 @@ namespace WinTune
             {
                 Tweak t = Find(id);
                 if (t == null) continue;
+                if (id == "clockweekday")
+                {
+                    if (RemoveWeekday()) { ok++; Emit(onEvent, "ok", t, "已恢复默认"); }
+                    else { fail++; fails.Add(t.Name); Emit(onEvent, "fail", t, "恢复失败"); }
+                    continue;
+                }
                 bool good = true;
                 foreach (RegOp op in t.Ops)
                 {
