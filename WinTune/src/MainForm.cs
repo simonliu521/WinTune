@@ -336,6 +336,9 @@ namespace WinTune
                 case "tweakRevert":
                     StartTweak(Json.StrList(d, "ids"), true);
                     break;
+                case "restartExplorer":
+                    StartRestartExplorer();
+                    break;
                 case "appsList":
                     SendAsync(new Func<string>(Apps.ListJson), "appsList");
                     break;
@@ -533,7 +536,7 @@ namespace WinTune
             string dir = BackupDir();
             Send(new JB()
                 .Add("type", "init")
-                .Add("version", "1.5.45")
+                .Add("version", "1.5.46")
                 .Add("admin", SysInfo.IsAdmin())
                 .Add("osName", SysInfo.OsName())
                 .Add("build", SysInfo.BuildNumber())
@@ -893,6 +896,23 @@ namespace WinTune
                     Log.Error("repair", ex.Message);
                     Send(new JB().Add("type", "repairDone").Add("id", id).Add("ok", false).Add("msg", ex.Message).End());
                 }
+            });
+            th.IsBackground = true;
+            th.Start();
+        }
+
+        private void StartRestartExplorer()
+        {
+            Thread th = new Thread(delegate ()
+            {
+                bool ok = false;
+                try { ok = Repair.RestartExplorer(); }
+                catch (Exception ex)
+                {
+                    Log.Error("shell", "重启资源管理器失败：" + ex.Message);
+                }
+                Send(new JB().Add("type", "restartExplorerDone").Add("ok", ok)
+                    .Add("msg", ok ? "资源管理器已重启" : "重启资源管理器失败，详见日志").End());
             });
             th.IsBackground = true;
             th.Start();

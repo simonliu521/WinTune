@@ -52,6 +52,23 @@ namespace WinTune
             cancelReq = true;
         }
 
+        /// <summary>系统优化页的“重启资源管理器”：结束 explorer.exe 后重新拉起，不碰其它窗口。</summary>
+        public static bool RestartExplorer()
+        {
+            try
+            {
+                RunQuiet("taskkill.exe", "/f /im explorer.exe");
+                Thread.Sleep(1200);
+                Process.Start("explorer.exe");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("repair", "重启资源管理器失败：" + ex.Message);
+                return false;
+            }
+        }
+
         private static void KillTree(Process p, bool wait)
         {
             try
