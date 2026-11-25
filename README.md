@@ -13,7 +13,7 @@ WinTune 是一套面向 Windows 10/11 的系统优化、清理与硬件监控工
 | 项目 | 版本 | 说明 |
 |---|---|---|
 | **WinTune** | 1.5.39 | 主程序。WebView2 单文件界面 + C# 引擎，负责扫描、清理、优化、修复、网络诊断和硬件概览。 |
-| **MiniMonitor** | 1.6.12 | 任务栏硬件监控与截图工具。可独立运行，也可从 WinTune 启动；包含管理员温度代理和截图编辑器。 |
+| **MiniMonitor** | 1.6.13 | 任务栏硬件监控与截图工具。可独立运行，也可从 WinTune 启动；包含管理员温度代理和截图编辑器。 |
 
 ### WinTune 功能
 
@@ -84,7 +84,7 @@ WinTune is a Windows 10/11 system optimization, cleanup, and hardware monitoring
 | Project | Version | Description |
 |---|---|---|
 | **WinTune** | 1.5.39 | Main application. A WebView2 single-page UI plus a C# engine for scanning, cleanup, optimization, repair, network diagnostics, and hardware overview. |
-| **MiniMonitor** | 1.6.12 | Taskbar hardware monitor and screenshot tool. Runs independently or from WinTune; includes an elevated temperature agent and screenshot editor. |
+| **MiniMonitor** | 1.6.13 | Taskbar hardware monitor and screenshot tool. Runs independently or from WinTune; includes an elevated temperature agent and screenshot editor. |
 
 ### WinTune features
 

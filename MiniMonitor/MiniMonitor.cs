@@ -136,7 +136,7 @@ public class MiniMonitor : Form
 
     // 程序自己的版本号：这是唯一的版本来源，启动时写进同目录 MiniMonitor.config 的 appSettings。
     // 外部程序（WinTune 等）读那个配置文件就能拿到这里的真实版本，升级本程序只需改这一行再编译。
-    public const string AppVersion = "1.6.12";
+    public const string AppVersion = "1.6.13";
 
     /// <summary>把 AppVersion / 构建日期写进 exe 同目录的 MiniMonitor.config（appSettings 段）。
     /// 写不进去（例如装在 Program Files 无写权限）就静默跳过，配置里保留打包时的值。</summary>
@@ -392,7 +392,7 @@ public class MiniMonitor : Form
                         "MiniMonitor", MessageBoxButtons.OK, ok ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
                 }));
             }
-            else if (PawnioInstalled() && InstallerPath().Length > 0)
+            else if (PawnioInstalled() && InstallerPath().Length > 0 && TempUnavailable())
             {
                 list.Add(new PopMenu.MItem("修复温度驱动", 3, delegate { RepairDriverAsync(); }));
             }
@@ -401,6 +401,15 @@ public class MiniMonitor : Form
 
         list.Add(new PopMenu.MItem("退出", 4, delegate { ExitAll(); }));
         return list;
+    }
+
+    // 只有三条温度链路都拿不到值时才显示“修复温度驱动”；界面已有温度就不再提醒。
+    bool TempUnavailable()
+    {
+        if (cpuTemp > 0) return false;
+        if (LhmTemp.Last > 0) return false;
+        try { if (TempBus.Read() > 0) return false; } catch { }
+        return true;
     }
 
     static string FindWinTuneExe()
