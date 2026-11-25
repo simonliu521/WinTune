@@ -12,15 +12,15 @@ WinTune 是一套面向 Windows 10/11 的系统优化、清理与硬件监控工
 
 | 项目 | 版本 | 说明 |
 |---|---|---|
-| **WinTune** | 1.5.38 | 主程序。WebView2 单文件界面 + C# 引擎，负责扫描、清理、优化、修复、网络诊断和硬件概览。 |
-| **MiniMonitor** | 1.6.11 | 任务栏硬件监控与截图工具。可独立运行，也可从 WinTune 启动；包含管理员温度代理和截图编辑器。 |
+| **WinTune** | 1.5.39 | 主程序。WebView2 单文件界面 + C# 引擎，负责扫描、清理、优化、修复、网络诊断和硬件概览。 |
+| **MiniMonitor** | 1.6.12 | 任务栏硬件监控与截图工具。可独立运行，也可从 WinTune 启动；包含管理员温度代理和截图编辑器。 |
 
 ### WinTune 功能
 
 - **概览**：CPU、内存、显卡、硬盘、温度传感器、风扇与运行状态集中展示，支持一键清理和网络体检。
 - **一键清理**：扫描 C 盘临时文件、缓存、更新残留等；不扫描或删除“软件残留”目录，删除前生成清单并创建还原点，可回退。
 - **系统优化**：按轻度、中度、重度档位管理系统优化项，支持逐项应用、撤销和原值备份。
-- **应用卸载**：读取系统卸载登记表，调用软件自己的官方卸载程序；支持 `UninstallString` / `QuietUninstallString`，不删除安装目录、不做静默强删。
+- **应用卸载**：读取系统卸载登记表，调用软件自己的官方卸载程序；支持 `UninstallString` / `QuietUninstallString`。没有卸载程序的应用，可选 BCU 4.16 引擎的 `UniversalUninstaller` 处理；BCU 只执行卸载，不启用残留清理。支持单个卸载和批量卸载。
 - **系统修复**：提供扫描、修复、重置、重启等维护动作，并记录每一步的状态和结果。
 - **网络修复**：覆盖 DNS、网卡、网关、hosts、代理、服务、MTU、静态路由和测速。
 - **检测规则**：把清理建议、残留判定和维护项的来源、依据集中展示，便于核对。
@@ -54,6 +54,7 @@ MiniMonitor 任务栏硬件条：CPU/GPU 温度、占用、内存和网络速度
 - `WinTune/assets`：WinTune 图标
 - `WinTune/build.ps1`：WinTune 的 csc 构建脚本
 - `WinTune/README.txt`：原始功能说明与版本记录
+- `WinTune/BCU-README.md`：BCU 4.16 卸载引擎的放置方式与许可证说明
 - `MiniMonitor`：MiniMonitor 源码、截图/录屏模块、温度代理、构建脚本与图标
 
 ### 构建说明
@@ -61,6 +62,7 @@ MiniMonitor 任务栏硬件条：CPU/GPU 温度、占用、内存和网络速度
 项目使用 Windows 自带的 `.NET Framework` `csc.exe` 编译，不依赖 Visual Studio 工程。
 
 - WinTune 运行依赖 WebView2、LibreHardwareMonitor、PawnIO 等 DLL，以及 `runtime` 目录；这些二进制依赖没有放入源码仓库。
+- BCU 卸载引擎不提交到源码仓库；发布完整包时把 `BCUninstaller_4.16_portable.zip` 解压到程序根目录的 `BCU` 文件夹。放置方式见 `WinTune/BCU-README.md`。
 - MiniMonitor 编译需要 `LibreHardwareMonitorLib.dll`、`System.Buffers.dll`、`System.Memory.dll`、`System.Runtime.CompilerServices.Unsafe.dll` 等同目录依赖。
 - 构建脚本保留了作者本地环境的依赖路径，使用前请按自己的目录调整。
 - 发布的完整运行包不包含在本仓库中，可在 Releases 或本地发布包中获取。
@@ -81,15 +83,15 @@ WinTune is a Windows 10/11 system optimization, cleanup, and hardware monitoring
 
 | Project | Version | Description |
 |---|---|---|
-| **WinTune** | 1.5.38 | Main application. A WebView2 single-page UI plus a C# engine for scanning, cleanup, optimization, repair, network diagnostics, and hardware overview. |
-| **MiniMonitor** | 1.6.11 | Taskbar hardware monitor and screenshot tool. Runs independently or from WinTune; includes an elevated temperature agent and screenshot editor. |
+| **WinTune** | 1.5.39 | Main application. A WebView2 single-page UI plus a C# engine for scanning, cleanup, optimization, repair, network diagnostics, and hardware overview. |
+| **MiniMonitor** | 1.6.12 | Taskbar hardware monitor and screenshot tool. Runs independently or from WinTune; includes an elevated temperature agent and screenshot editor. |
 
 ### WinTune features
 
 - **Overview**: CPU, memory, GPU, storage, temperature sensors, fan and runtime status, with one-click cleanup and network check.
 - **One-click cleanup**: Scans temporary files, caches, update residue and other C: drive items; it does not scan or delete "software residue" directories; creates a manifest and restore point before deletion.
 - **System optimization**: Manages optimization items by light/medium/heavy profiles, with per-item apply, revert and original-value backup.
-- **Application uninstall**: Reads the Windows uninstall registry and launches each app's own official uninstaller; supports `UninstallString` / `QuietUninstallString`, never deletes install directories or performs silent force removal.
+- **Application uninstall**: Reads the Windows uninstall registry and launches each app's own official uninstaller; supports `UninstallString` / `QuietUninstallString`. Apps without an uninstaller can use the optional BCU 4.16 `UniversalUninstaller` engine. BCU is used for uninstall only, never for leftover cleanup. Single and batch uninstall are supported.
 - **System repair**: Provides scan, repair, reset and restart maintenance actions, with per-step status and results.
 - **Network repair**: Covers DNS, network adapters, gateway, hosts, proxy, services, MTU, static routes and speed tests.
 - **Detection rules**: Shows the evidence and source for cleanup suggestions, residue decisions and maintenance items.
@@ -130,6 +132,7 @@ MiniMonitor taskbar bar: CPU/GPU temperatures, usage, memory and network through
 The project is compiled with the Windows built-in `.NET Framework` `csc.exe`; no Visual Studio project is required.
 
 - WinTune runtime needs WebView2, LibreHardwareMonitor, PawnIO and other DLLs plus a `runtime` directory. These binary dependencies are not included in the source repository.
+- The BCU engine is not committed to the source repository. For a full release, extract `BCUninstaller_4.16_portable.zip` into a `BCU` folder next to the program. See `WinTune/BCU-README.md`.
 - MiniMonitor compilation needs `LibreHardwareMonitorLib.dll`, `System.Buffers.dll`, `System.Memory.dll`, `System.Runtime.CompilerServices.Unsafe.dll` and other files in the same directory.
 - The build scripts retain the author's local dependency paths; adjust them for your own directory before building.
 - The complete runnable package is not included in this repository; use Releases or a local package.

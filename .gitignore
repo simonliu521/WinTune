@@ -26,6 +26,7 @@
 WinTune-*/
 runtime/
 vendor/
+WinTune/BCU/
 
 # 系统与诊断输出
 *.csv

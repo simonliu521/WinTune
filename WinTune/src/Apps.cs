@@ -252,7 +252,7 @@ namespace WinTune
         {
             List<App> list = List();
             StringBuilder sb = new StringBuilder(20000);
-            sb.Append("{\"type\":\"appsList\",\"total\":").Append(list.Count).Append(",\"items\":[");
+            sb.Append("{\"type\":\"appsList\",\"bcu\":").Append(Bcu.Available() ? "true" : "false").Append(",\"bcuVer\":").Append(Json.Quote(Bcu.Version)).Append(",\"total\":").Append(list.Count).Append(",\"items\":[");
             for (int i = 0; i < list.Count; i++)
             {
                 App a = list[i];
@@ -279,7 +279,7 @@ namespace WinTune
         }
 
         /// <summary>运行库 / 驱动 / 框架：即使带卸载命令，删了也会让别的软件或硬件失效</summary>
-        private static bool IsKeep(string name)
+        public static bool IsKeep(string name)
         {
             if (name == null) return false;
             string n = name.ToLower();

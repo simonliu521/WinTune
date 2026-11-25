@@ -345,6 +345,9 @@ namespace WinTune
                 case "appUninstall":
                     Send(Apps.Uninstall(Json.Str(d, "id")));
                     break;
+                case "bcuUninstall":
+                    StartBcuUninstall(Json.StrList(d, "ids"));
+                    break;
                 case "appLeftover":
                     StartAppLeftover(Json.Str(d, "id"));
                     break;
@@ -539,7 +542,7 @@ namespace WinTune
             string dir = BackupDir();
             Send(new JB()
                 .Add("type", "init")
-                .Add("version", "1.5.38")
+                .Add("version", "1.5.39")
                 .Add("admin", SysInfo.IsAdmin())
                 .Add("osName", SysInfo.OsName())
                 .Add("build", SysInfo.BuildNumber())
@@ -834,6 +837,22 @@ namespace WinTune
                 {
                     Log.Error("apps", ex.Message);
                     Send(new JB().Add("type", "appDone").Add("ok", false).Add("id", id).Add("msg", ex.Message).End());
+                }
+            });
+            th.IsBackground = true;
+            th.Start();
+        }
+
+        private void StartBcuUninstall(List<string> ids)
+        {
+            if (ids == null || ids.Count == 0) return;
+            Thread th = new Thread(delegate ()
+            {
+                try { Bcu.Uninstall(ids, Send); }
+                catch (Exception ex)
+                {
+                    Log.Error("bcu", ex.Message);
+                    Send(new JB().Add("type", "bcuDone").Add("ok", false).Add("msg", ex.Message).End());
                 }
             });
             th.IsBackground = true;

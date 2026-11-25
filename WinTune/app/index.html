@@ -219,7 +219,7 @@ button:disabled{cursor:not-allowed;opacity:.45}
 .badge2.rv{color:#c3a6ff;border-color:#463a5c;background:rgba(160,120,255,.10)}
 
 /* 应用管理：图标 + 来源 + 状态，七列对齐 */
-.approw2{display:grid;grid-template-columns:52px minmax(0,1fr) 92px 88px 84px 96px 148px;gap:12px;align-items:center;padding:7px 14px;border-bottom:1px solid #1f2833;font-size:12.5px}
+.approw2{display:grid;grid-template-columns:26px 52px minmax(0,1fr) 92px 88px 84px 96px 148px;gap:12px;align-items:center;padding:7px 14px;border-bottom:1px solid #1f2833;font-size:12.5px}
 .approw2:last-child{border-bottom:none}
 .approw2:hover{background:#1f2732}
 .approw2 .appic{width:44px;height:44px;border-radius:10px;background:#25303d;display:grid;place-items:center;overflow:hidden;flex:none}
@@ -230,7 +230,8 @@ button:disabled{cursor:not-allowed;opacity:.45}
 .approw2 .nm small{display:block;color:var(--dim);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
 .approw2 .r{text-align:right;color:var(--muted);font-size:11.5px;white-space:nowrap}
 .approw2 .tagc{display:flex;justify-content:flex-end;gap:8px;min-width:0}
-.apphead,.approw2{grid-template-columns:52px minmax(0,1fr) 92px 88px 84px 96px 148px}
+.approw2 .ck{cursor:pointer}
+.apphead,.approw2{grid-template-columns:26px 52px minmax(0,1fr) 92px 88px 84px 96px 148px}
 .apphead{display:grid;gap:12px;align-items:center;padding:8px 14px;font-size:11px;color:var(--dim);letter-spacing:.4px;border-bottom:1px solid var(--line);background:#1a212a}
 
 .view[data-v="tune"]{padding-bottom:92px}
@@ -725,6 +726,13 @@ pre.details{max-height:150px;overflow:auto;background:#1b232d;border:1px solid v
           <button class="btn ghost" onclick="loadApps()">刷新</button>
         </div>
         <div class="note" id="appNote" style="margin:-4px 0 12px"></div>
+        <div class="toolstrip" style="margin-bottom:10px">
+          <button class="btn ghost" onclick="appSelectAll()">全选可卸载</button>
+          <button class="btn ghost" onclick="appSelectNone()">清空选择</button>
+          <span class="note" id="appSelNote" style="margin-left:2px">已选 0 个</span>
+          <button class="btn pri" id="appBatchBtn" disabled onclick="appBatchUninstall()">批量卸载</button>
+          <span class="note" id="bcuNote">读取 BCU 引擎状态…</span>
+        </div>
         <div id="appList"><div class="sk"><i></i><i></i><i></i><i></i><i></i></div></div>
         <div class="sec" id="appRecSec"><h3>推荐安装</h3><div class="line"></div><span class="note">在线目录可用时显示，安装进度实时可见</span></div>
         <div class="card" id="appRec" style="padding:0"></div>
@@ -2167,7 +2175,7 @@ function onDeps(d){
     h += '<div class="kv"><span>' + it.n + ' <i style="color:var(--dim);font-style:normal">' + it.d + '</i></span>' +
       (ok ? '<b style="color:var(--ok)">已就绪</b>' : '<b style="color:var(--warn)">自动补装中</b>') + '</div>';
   });
-  h += '<div class="kv"><span>软件版本</span><b>' + esc((S.sys && S.sys.version) || "1.5.38") + '</b></div>';
+  h += '<div class="kv"><span>软件版本</span><b>' + esc((S.sys && S.sys.version) || "1.5.39") + '</b></div>';
   box.innerHTML = h;
 }
 
@@ -2240,7 +2248,7 @@ function exportReport(){ post({cmd:"exportReport"}); }
 
 /* ===== 系统优化（39 项，轻度 / 中度 / 重度三档） ===== */
 S.tune = { items: [], sel: {}, data: null, mode: "none", f: "all", q: "", drawer: "" };
-S.apps = { items: [], rec: [], winget: null };
+S.apps = { items: [], rec: [], winget: null, sel: {}, bcu: false, bcuVer: "" };
 S.repair = { items: [], admin: false };
 S.net = { info: null, pings: [], busy: false, lines: [], timer: null, t0: 0, check: [], checked: false, mtu: null };	// 网络修复：一次只跑一个动作
 
@@ -2685,7 +2693,13 @@ function loadApps(){
 
 function onAppsList(m){
   S.apps.items = m.items || [];
+  S.apps.bcu = !!m.bcu;
+  S.apps.bcuVer = m.bcuVer || "";
+  var valid = {};
+  S.apps.items.forEach(function(a){ valid[a.id] = true; });
+  Object.keys(S.apps.sel).forEach(function(id){ if(!valid[id]) delete S.apps.sel[id]; });
   renderApps();
+  renderAppBatch();
 }
 
 function onAppsRec(m){
@@ -2708,7 +2722,7 @@ function renderAppsKpi(){
   var n = S.apps.items.length;
   var sys = S.apps.items.filter(function(a){ return a.kind === "system"; }).length;
   var per = n - sys;
-  var un = S.apps.items.filter(function(a){ return a.canUninstall && !a.runtime; }).length;
+  var un = S.apps.items.filter(function(a){ return appSelectable(a); }).length;
   var cc = S.apps.items.filter(function(a){ return a.canRemove && !a.runtime; }).length;
   var rt = S.apps.items.filter(function(a){ return a.runtime; }).length;
   $("appNote").innerHTML = '共 <b style="color:var(--text)">' + n + '</b> 个 · 系统应用 <b style="color:var(--muted)">' + sys +
@@ -2722,6 +2736,120 @@ function findApp(id){
   return null;
 }
 
+function appSelectable(a){
+  return !!a && !a.runtime && (a.canUninstall || a.canRemove);
+}
+
+function toggleAppSel(e, el){
+  if(e) e.stopPropagation();
+  var id = (el && el.getAttribute) ? el.getAttribute("data-id") : e.currentTarget.getAttribute("data-id");
+  var a = findApp(id);
+  if(!appSelectable(a)) return;
+  if(S.apps.sel[id]) delete S.apps.sel[id]; else S.apps.sel[id] = true;
+  renderApps();
+  renderAppBatch();
+}
+
+function appSelectAll(){
+  S.apps.items.forEach(function(a){ if(appSelectable(a)) S.apps.sel[a.id] = true; });
+  renderApps();
+  renderAppBatch();
+}
+
+function appSelectNone(){
+  S.apps.sel = {};
+  renderApps();
+  renderAppBatch();
+}
+
+function renderAppBatch(){
+  if(!$("appSelNote") || !$("appBatchBtn")) return;
+  var n = Object.keys(S.apps.sel).length;
+  $("appSelNote").textContent = "已选 " + n + " 个";
+  $("appBatchBtn").disabled = n === 0 || !S.apps.bcu || S.exec;
+  if($("bcuNote")){
+    $("bcuNote").textContent = S.apps.bcu
+      ? ("BCU " + (S.apps.bcuVer || "4.16") + " 已就绪 · 只走卸载，不清理残留")
+      : "缺少 BCU 引擎：把 BCUninstaller 4.16 便携包放到 BCU 文件夹";
+  }
+}
+
+function appBcuUninstall(e){
+  e.stopPropagation();
+  var id = e.currentTarget.getAttribute("data-id");
+  bcuConfirm([id]);
+}
+
+function appBatchUninstall(){
+  var ids = Object.keys(S.apps.sel);
+  if(!ids.length) return;
+  bcuConfirm(ids);
+}
+
+function bcuConfirm(ids){
+  if(!S.apps.bcu){
+    tipModal("缺少 BCU 引擎", '<div class="hint">把 BCUninstaller 4.16 便携包解压后放到程序目录的 <b>BCU</b> 文件夹，再点刷新。只复制 BCU-console.exe 不够，要带同目录依赖。</div>');
+    return;
+  }
+  var list = [];
+  ids.forEach(function(id){ var a = findApp(id); if(appSelectable(a)) list.push(a); });
+  if(!list.length) return;
+  var names = list.slice(0, 6).map(function(a){ return "「" + a.name + "」"; }).join("、");
+  if(list.length > 6) names += " 等";
+  confirmModal(list.length > 1 ? "批量卸载确认" : "BCU 卸载确认",
+    '<div class="hint danger">将用 <b>BCUninstaller ' + esc(S.apps.bcuVer || "4.16") + '</b> 卸载 ' + list.length + ' 个程序：' + esc(names) + '。' +
+    '只执行卸载，不做软件残留扫描，不清理其它目录。卸载过程中可能弹出软件自己的窗口，请按提示完成。</div>' +
+    '<div class="hint" style="margin-top:8px">没有卸载程序的应用会由 BCU 的 UniversalUninstaller 处理；系统运行库和驱动已自动排除。</div>',
+    "开始卸载",
+    function(){ startBcu(list.map(function(a){ return a.id; })); });
+}
+
+function startBcu(ids){
+  S.exec = true;
+  $("mTitle").textContent = "BCU 正在卸载";
+  $("mBody").innerHTML = '<div class="hint">BCU 正在扫描并匹配程序，随后逐个调用卸载器。请勿关闭窗口。</div>' +
+    '<div class="rlog" id="execLog" style="margin-top:10px;min-height:120px"></div>';
+  $("mFoot").innerHTML = '<button class="btn" disabled>处理中…</button>';
+  $("modal").classList.add("open");
+  post({cmd:"bcuUninstall", ids:ids});
+}
+
+function onBcuStart(m){
+  var box = document.getElementById("execLog");
+  if(box) box.textContent = "";
+  $("mTitle").textContent = "BCU 正在卸载 · " + (m.total || 0) + " 个";
+  if($("mBody")) $("mBody").innerHTML = '<div class="hint">BCU 已启动，正在扫描程序并匹配卸载清单。' +
+    (m.skipped ? " 已跳过 " + m.skipped + " 个系统组件。" : "") + '</div>' +
+    '<div class="rlog" id="execLog" style="margin-top:10px;min-height:120px"></div>';
+}
+
+function onBcuLine(m){
+  var box = document.getElementById("execLog");
+  if(!box) return;
+  box.textContent += (m.line || "") + "\n";
+  box.scrollTop = box.scrollHeight;
+}
+
+function onBcuDone(m){
+  S.exec = false;
+  var box = document.getElementById("execLog");
+  var log = box ? box.textContent : "";
+  var msg = m.msg || (m.ok ? "BCU 卸载完成" : "BCU 卸载未完成");
+  $("mTitle").textContent = m.ok ? "BCU 卸载完成" : "BCU 卸载未完成";
+  $("mBody").innerHTML =
+    '<div class="grid g2" style="margin-bottom:12px">' +
+      card("本次选中", String(m.total || 0) + " 个", m.skipped ? "跳过 " + m.skipped + " 个系统组件" : "只执行卸载") +
+      card("仍存在", '<span style="color:' + ((m.remaining || 0) > 0 ? "var(--warn)" : "var(--ok)") + '">' + (m.remaining || 0) + '</span>', "重新扫描卸载登记表") +
+      card("补删登记", String(m.regRemoved || 0) + " 条", "仅限本次选中且目录已删除") +
+    '</div>' +
+    '<div class="hint' + (m.ok ? '' : ' danger') + '">' + esc(msg) + '</div>' +
+    (m.remainingNames ? '<div class="hint" style="margin-top:6px">仍存在：' + esc(m.remainingNames) + '</div>' : "") +
+    (log ? '<div class="rlog" style="margin-top:10px;max-height:180px;overflow:auto">' + esc(log) + '</div>' : "");
+  $("mFoot").innerHTML = '<button class="btn pri" onclick="closeModal(); loadApps()">完成</button>';
+  S.apps.sel = {};
+  loadApps();
+}
+
 function setAppFilter(f){ S.apps.f = f; renderApps(); }
 
 function renderApps(){
@@ -2732,7 +2860,7 @@ function renderApps(){
   var items = all.filter(function(a){
     if(f === "system" && a.kind !== "system") return false;
     if(f === "personal" && a.kind !== "personal") return false;
-    if(f === "uninstall" && !(a.canUninstall && !a.runtime)) return false;
+    if(f === "uninstall" && !(appSelectable(a) && !a.runtime)) return false;
     if(!q) return true;
     return ((a.name || "") + " " + (a.pub || "") + " " + (a.loc || "")).toLowerCase().indexOf(q) >= 0;
   });
@@ -2741,7 +2869,7 @@ function renderApps(){
   if($("appSeg")){
     var sysN = all.filter(function(a){ return a.kind === "system"; }).length;
     var perN = all.length - sysN;
-    var unN = all.filter(function(a){ return a.canUninstall && !a.runtime; }).length;
+    var unN = all.filter(function(a){ return appSelectable(a); }).length;
     function sb(k, label){ return '<button class="' + ((S.apps.f || "all") === k ? "on" : "") + '" data-f="' + k + '">' + label + '</button>'; }
     $("appSeg").innerHTML = sb("all", "全部 " + all.length) + sb("system", "系统应用 " + sysN) +
       sb("personal", "个人安装 " + perN) + sb("uninstall", "可卸载 " + unN);
@@ -2763,7 +2891,7 @@ function renderApps(){
     html += '<div class="gbox"><div class="ghead"><b>' + g.name + ' · ' + list.length + ' 个</b>' +
       '<span class="tip">' + g.tip + '</span>' +
       '<span class="sum">' + removable + ' 个可卸载' + (brokenN ? ' · <span style="color:var(--warn)">' + brokenN + ' 个入口失效</span>' : '') + (runtimeN ? ' · ' + runtimeN + ' 个系统组件' : '') + '</span></div>' +
-      '<div class="apphead"><span></span><span>应用</span><span>版本</span><span style="text-align:right">大小</span>' +
+      '<div class="apphead"><span></span><span></span><span>应用</span><span>版本</span><span style="text-align:right">大小</span>' +
       '<span>来源</span><span style="text-align:right">状态</span><span></span></div>';
     list.slice(0, 300).forEach(function(a){
       var initial = (a.name || "?").replace(/[^A-Za-z0-9\u4e00-\u9fa5]/g, "").substr(0, 1).toUpperCase() || "?";
@@ -2781,8 +2909,14 @@ function renderApps(){
         : '<span class="badge2 risk">无卸载命令</span>';
       else stBadge = a.kind === "system" ? '<span class="badge2">随系统</span>' : '<span class="badge2">无卸载命令</span>';
       var btns = (a.canUninstall && !a.runtime ? '<button class="mini" data-id="' + esc(a.id) + '" onclick="appUninstall(event)">卸载</button>' : '') +
+        (!a.canUninstall && a.canRemove && !a.runtime ? '<button class="mini" data-id="' + esc(a.id) + '" onclick="appBcuUninstall(event)">BCU 卸载</button>' : '') +
         '<button class="mini" data-id="' + esc(a.id) + '" onclick="appOpenLoc(event)">打开目录</button>';
-      html += '<div class="approw2">' +
+      var canSel = appSelectable(a);
+      var selOn = !!S.apps.sel[a.id];
+      var ck = '<span class="ck ' + (canSel ? (selOn ? "on" : "") : "off") + '" data-id="' + esc(a.id) + '"' +
+        (canSel ? ' onclick="toggleAppSel(event,this)"' : '') + '>' + (selOn ? "✓" : "") + '</span>';
+      html += '<div class="approw2" data-id="' + esc(a.id) + '">' +
+        ck +
         '<span class="appic">' + iconHtml + '</span>' +
         '<div class="nm"><b>' + esc(a.name) + '</b><small>' + esc(a.pub || "—") + (a.loc ? " · " + esc(a.loc) : "") + '</small></div>' +
         '<span class="r" style="text-align:left">' + esc(a.ver || "—") + '</span>' +
@@ -3612,6 +3746,9 @@ if(bridge){
       case "appsRec": onAppsRec(m); break;
       case "appOut": onAppOut(m); break;
       case "appDone": onAppDone(m); break;
+      case "bcuStart": onBcuStart(m); break;
+      case "bcuLine": onBcuLine(m); break;
+      case "bcuDone": onBcuDone(m); break;
       case "appResult":
         if(!m.ok){ tipModal("操作没有完成", '<div class="hint">' + esc(m.msg) + '</div>'); loadApps(); }
         else toast(m.msg);

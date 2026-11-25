@@ -136,7 +136,7 @@ public class MiniMonitor : Form
 
     // 程序自己的版本号：这是唯一的版本来源，启动时写进同目录 MiniMonitor.config 的 appSettings。
     // 外部程序（WinTune 等）读那个配置文件就能拿到这里的真实版本，升级本程序只需改这一行再编译。
-    public const string AppVersion = "1.6.11";
+    public const string AppVersion = "1.6.12";
 
     /// <summary>把 AppVersion / 构建日期写进 exe 同目录的 MiniMonitor.config（appSettings 段）。
     /// 写不进去（例如装在 Program Files 无写权限）就静默跳过，配置里保留打包时的值。</summary>
@@ -391,6 +391,10 @@ public class MiniMonitor : Form
                         : "安装被取消了，CPU 温度会一直是 --。",
                         "MiniMonitor", MessageBoxButtons.OK, ok ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
                 }));
+            }
+            else if (PawnioInstalled() && InstallerPath().Length > 0)
+            {
+                list.Add(new PopMenu.MItem("修复温度驱动", 3, delegate { RepairDriverAsync(); }));
             }
         }
         catch { }
@@ -1159,7 +1163,8 @@ public class MiniMonitor : Form
                 bool ok = false;
                 for (int i = 0; i < 5; i++)
                 {
-                    if (TempBus.Read() > 0 || LhmTemp.Last > 0) { ok = true; break; }
+                    // cpuTemp 包含 ACPI/PDH 兜底值；界面已经有温度时，不要再弹“读不到温度”的提示。
+                    if (TempBus.Read() > 0 || LhmTemp.Last > 0 || cpuTemp > 0) { ok = true; break; }
                     System.Threading.Thread.Sleep(1600);
                 }
                 if (ok) return;                                          // 温度已经能读到，不打扰
@@ -1207,12 +1212,14 @@ public class MiniMonitor : Form
                 try { Log("dep: agent started"); } catch { }
                 for (int i = 0; i < 4; i++)
                 {
-                    if (TempBus.Read() > 0 || LhmTemp.Last > 0) return;
+                    if (TempBus.Read() > 0 || LhmTemp.Last > 0 || cpuTemp > 0) return;
                     System.Threading.Thread.Sleep(1500);
                 }
 
                 // 驱动装了但温度仍读不到：提示重装/修复 PawnIO，不再无声无息。
+                // 上次修复失败后 7 天内不再每次开机弹；右键菜单仍可手动重试。
                 if ((DateTime.Now - lastInstallPrompt).TotalSeconds < 300) return;
+                if (RepairFailedRecently()) return;
                 lastInstallPrompt = DateTime.Now;
                 string installer = InstallerPath();
                 if (installer.Length == 0)
@@ -1237,7 +1244,25 @@ public class MiniMonitor : Form
                 if (repair)
                 {
                     try { Log("dep: repair install"); } catch { }
-                    RunElevated(Application.ExecutablePath, "--bootstrap");
+                    bool repaired = RunElevated(Application.ExecutablePath, "--bootstrap --repair");
+                    string result = "";
+                    try
+                    {
+                        string f = Path.Combine(RepairStateDir(), "repair.result");
+                        if (File.Exists(f)) result = File.ReadAllText(f).Trim();
+                    }
+                    catch { }
+                    BeginInvoke((Action)delegate
+                    {
+                        if (!repaired) MessageBox.Show("驱动修复没有完成：可能取消了管理员授权，或安装程序启动失败。\n\n" +
+                            "可以右键任务栏 MiniMonitor →「修复温度驱动」再试一次。",
+                            "MiniMonitor", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        else if (result == "ok") MessageBox.Show("PawnIO 驱动已重装，温度代理已重启。\n\n几秒内 CPU 温度应该会恢复；如果仍是旧值，请完全退出 MiniMonitor 再打开。",
+                            "MiniMonitor", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        else MessageBox.Show("PawnIO 驱动已重装，但温度代理仍未写出 CPU 温度。\n\n" +
+                            "这通常不是缺少 PawnIO_setup.exe，而是当前硬件库读不到这颗 CPU。已暂停 7 天内的重复提示，可右键菜单手动重试。",
+                            "MiniMonitor", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    });
                 }
             }
             catch { }
@@ -1624,6 +1649,7 @@ public class MiniMonitor : Form
         return File.Exists(bak) ? bak : "";
     }
 
+    // 安装器不再从程序目录删除：用户能看到它，修复入口也始终有文件可用。
     static void StashInstaller()
     {
         try
@@ -1634,14 +1660,14 @@ public class MiniMonitor : Form
             Directory.CreateDirectory(deps);
             string bak = Path.Combine(deps, "PawnIO_setup.exe");
             try { File.Copy(app, bak, true); } catch { }
-            try { File.Delete(app); } catch { }
         }
         catch { }
     }
 
-    static bool EnsurePawnio()
+    static bool EnsurePawnio(bool force)
     {
-        if (PawnioInstalled()) { StashInstaller(); return true; }
+        // force=true 用于“驱动登记还在、但温度读不到”的修复：不能因为注册表键存在就直接返回。
+        if (!force && PawnioInstalled()) { StashInstaller(); return true; }
         try
         {
             string setup = InstallerPath();
@@ -1651,8 +1677,8 @@ public class MiniMonitor : Form
             psi.CreateNoWindow = true;
             using (Process p = Process.Start(psi))
             {
-                p.WaitForExit(30000);
-                bool ok = PawnioInstalled();
+                p.WaitForExit(60000);
+                bool ok = PawnioInstalled() && p.ExitCode == 0;
                 if (ok) StashInstaller();
                 return ok;
             }
@@ -1661,19 +1687,50 @@ public class MiniMonitor : Form
     }
 
     // 一次性引导：界面用 runas 调起本模式，只弹一次 UAC，驱动和计划任务一起弄好
-    static void Bootstrap()
+    static void Bootstrap(bool repair)
     {
-        EnsurePawnio();
+        bool pawn = EnsurePawnio(repair);
         string tmp = Path.Combine(Path.GetTempPath(), "MiniMonitorTask.xml");
         try
         {
             File.WriteAllText(tmp, BuildTaskXml(), Encoding.Unicode);
             RunHidden("schtasks.exe", "/Create /TN \"" + TaskName + "\" /XML \"" + tmp + "\" /F");
             try { File.Delete(tmp); } catch { }
+            RunHidden("schtasks.exe", "/End /TN \"" + TaskName + "\"");
             RunHidden("schtasks.exe", "/Run /TN \"" + TaskName + "\"");
         }
         catch { }
+
+        if (repair)
+        {
+            // 让新代理有几秒钟写共享内存；把结果留给界面判断，避免“点了是没反应”。
+            try
+            {
+                System.Threading.Thread.Sleep(9000);
+                bool temp = TempBus.Read() > 0;
+                Directory.CreateDirectory(RepairStateDir());
+                File.WriteAllText(Path.Combine(RepairStateDir(), "repair.result"), temp && pawn ? "ok" : "fail");
+            }
+            catch { }
+        }
         Environment.Exit(0);
+    }
+
+    static string RepairStateDir()
+    {
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MiniMonitor");
+    }
+
+    static bool RepairFailedRecently()
+    {
+        try
+        {
+            string f = Path.Combine(RepairStateDir(), "repair.result");
+            if (!File.Exists(f)) return false;
+            if (File.ReadAllText(f).Trim() != "fail") return false;
+            return (DateTime.Now - File.GetLastWriteTime(f)).TotalDays < 7;
+        }
+        catch { return false; }
     }
 
     void SetAutoStart(bool on)
@@ -1720,11 +1777,40 @@ public class MiniMonitor : Form
             psi.WindowStyle = ProcessWindowStyle.Hidden;
             using (Process p = Process.Start(psi))
             {
-                p.WaitForExit(20000);
+                p.WaitForExit(90000);
                 return p.ExitCode == 0;
             }
         }
         catch { return false; }   // 用户取消 UAC
+    }
+
+    // 右键菜单的“修复温度驱动”：后台跑，别把菜单线程卡住。
+    void RepairDriverAsync()
+    {
+        System.Threading.ThreadPool.QueueUserWorkItem(delegate
+        {
+            bool ok = RunElevated(Application.ExecutablePath, "--bootstrap --repair");
+            string result = "";
+            try
+            {
+                string f = Path.Combine(RepairStateDir(), "repair.result");
+                if (File.Exists(f)) result = File.ReadAllText(f).Trim();
+            }
+            catch { }
+            try
+            {
+                BeginInvoke((Action)delegate
+                {
+                    if (!ok) MessageBox.Show("修复没有完成：可能取消了管理员授权。", "MiniMonitor",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    else if (result == "ok") MessageBox.Show("驱动已重装，温度代理已重启。", "MiniMonitor",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    else MessageBox.Show("驱动已重装，但温度仍未恢复；已暂停 7 天内的重复提示。", "MiniMonitor",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                });
+            }
+            catch { }
+        });
     }
 
     // 旧版注册表自启的清理（现在只用计划任务，不再写 Run）
@@ -1764,7 +1850,7 @@ public class MiniMonitor : Form
         if (mx != null && !created) return;      // 已有代理在跑
 
         // 代理本身是最高权限：驱动没装就静默补上，避免新机器只显示 --
-        EnsurePawnio();
+        EnsurePawnio(false);
         LhmTemp.Start();
         TempBus.Create();
         if (TempBus.StopRequested()) { try { LhmTemp.Stop(); } catch { } return; }   // 主程序正在退出，不再拉起界面
@@ -1865,10 +1951,12 @@ public class MiniMonitor : Form
 
         bool isAgent = false;
         bool isBootstrap = false;
+        bool isRepair = false;
         if (args != null) foreach (string a in args)
         {
             if (a == "--agent") isAgent = true;
             if (a == "--bootstrap") isBootstrap = true;
+            if (a == "--repair") isRepair = true;
         }
 
         bool admin = false;
@@ -1888,7 +1976,7 @@ public class MiniMonitor : Form
         if (isAgent) { RunTempAgent(); return; }
 
         // 管理员引导模式：装驱动 + 建自启任务 + 拉起代理，完事就退
-        if (isBootstrap) { Bootstrap(); return; }
+        if (isBootstrap) { Bootstrap(isRepair); return; }
 
         // 界面模式：普通权限运行，才能挂成任务栏的子窗口
         bool uiCreated = false;

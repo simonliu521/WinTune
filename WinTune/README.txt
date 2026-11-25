@@ -1,4 +1,4 @@
-WinTune 1.5.38 · 工程说明（交付 / 二次开发请先读这一页）
+WinTune 1.5.39 · 工程说明（交付 / 二次开发请先读这一页）
 ===========================================================
 
 一、这是什么
@@ -1091,7 +1091,7 @@ WinTune 1.5.38 · 工程说明（交付 / 二次开发请先读这一页）
 
   1. 现象：MiniMonitor 启动后没有 PawnIO，CPU 温度一直 --；WinTune 启动后 CPU 温度也读不到，
      但原来的逻辑只是静默重试/静默 bootstrap，用户不知道要运行安装程序。
-  2. MiniMonitor 1.6.11
+  2. MiniMonitor 1.6.12
        · 启动自检等待温度约 10 秒后，如果仍然读不到：
          - 未检测到 PawnIO 服务：弹「未检测到 PawnIO 驱动…是否运行 PawnIO 安装程序？」
          - 已安装但温度仍为 -1：弹「PawnIO 已安装但温度读不到…是否修复驱动？」
@@ -1107,3 +1107,24 @@ WinTune 1.5.38 · 工程说明（交付 / 二次开发请先读这一页）
   4. 验收
        · MiniMonitor.exe 163,840 字节（1.6.11）；WinTune.exe 377,344 字节（1.5.38）。
        · 无 PawnIO/无温度时 MiniMonitor 弹窗可点“是/否”；WinTune 概览出现提示条与按钮。
+四十一、1.5.39（应用卸载接入 BCU 4.16，支持单个 / 批量卸载）
+
+  1. 背景：原生卸载只能调用软件自己登记的 UninstallString / QuietUninstallString。
+     大量软件没有卸载程序，原生列表只能“打开目录”，无法真正卸载。
+  2. 方案：引入 Bulk Crap Uninstaller 4.16 portable 的 BCU-console.exe 作为外部引擎。
+       · 只调用 uninstall <list.bcul> /Q /U /V，不启用 /J，不做残留 / Junk 清理。
+       · 没有卸载入口的条目增加“BCU 卸载”按钮；支持复选框批量选择、全选可卸载、清空选择。
+       · .bcul 用 DisplayName + RegistryKeyName 精确匹配，避免误选同名条目。
+       · BCU 用 UniversalUninstaller 删除安装目录；目录确实消失后，才补删本次选中的那条注册表登记，不扫描其它条目。
+       · BCU 引擎需要管理员权限：WinTune 非管理员时通过 UAC 启动；取消授权会明确报错。
+       · Guard 会跳过盘符根、Windows、Program Files 根、用户目录根等危险安装位置。
+  3. 目录：BCU 引擎放在程序根目录 BCU\，源码仓库不提交二进制；放置方式见 BCU-README.md。
+  4. 未做：不清理 BCU 定义的残留目录、注册表残留、快捷方式残留；不把 BCU 的全盘 Junk 扫描接进一键清理。
+四十二、1.6.12（PawnIO 提示修复与安装器保留）
+
+  1. PawnIO_setup.exe 不再安装后从 MiniMonitor 目录删除；安装器始终留在程序目录，备份仍写 %LOCALAPPDATA%\WinTune\deps。
+  2. “已安装但温度读不到”时，点“是”改为强制执行 `--bootstrap --repair`，不再因为注册表键存在就直接跳过驱动安装。
+  3. 修复结果写 `%APPDATA%\MiniMonitor\repair.result`；失败会明确弹窗，成功后 7 天内不再重复开机提示。
+  4. 如果界面已经有 ACPI/PDH 兜底温度（cpuTemp > 0），启动自检不再弹“温度读不到”，避免误报。
+  5. 右键菜单新增“修复温度驱动”，随时可手动重试。
+  6. 已知限制：当前 LibreHardwareMonitorLib 0.9.6 在部分 11 代 Intel 上 CPU Package 温度为空；此时显示的是 ACPI/PDH 兜底值，不是内核封装温度。
