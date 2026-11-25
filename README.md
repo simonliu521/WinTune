@@ -12,15 +12,15 @@ WinTune 是一套面向 Windows 10/11 的系统优化、清理与硬件监控工
 
 | 项目 | 版本 | 说明 |
 |---|---|---|
-| **WinTune** | 1.5.41 | 主程序。WebView2 单文件界面 + C# 引擎，负责扫描、清理、优化、修复、网络诊断和硬件概览。 |
+| **WinTune** | 1.5.42 | 主程序。WebView2 单文件界面 + C# 引擎，负责扫描、清理、优化、修复、网络诊断和硬件概览。 |
 | **MiniMonitor** | 1.6.14 | 任务栏硬件监控与截图工具。可独立运行，也可从 WinTune 启动；包含管理员温度代理和截图编辑器。 |
 
 ### WinTune 功能
 
 - **概览**：CPU、内存、显卡、硬盘、温度传感器、风扇与运行状态集中展示，支持一键清理和网络体检。
-- **一键清理**：扫描 C 盘临时文件、缓存、更新残留等；不扫描或删除“软件残留”目录，删除前生成清单并创建还原点，可回退。
+- **一键清理**：扫描 C 盘临时文件、系统缓存、更新残留；新增「软件缓存」组，按已装软件列出可重建的 Cache / Code Cache / GPUCache / 日志等目录，不碰账号、聊天记录、下载与文档。
 - **系统优化**：按轻度、中度、重度档位管理系统优化项，支持逐项应用、撤销和原值备份。
-- **应用卸载**：读取系统卸载登记表，调用软件自己的官方卸载程序；支持 `UninstallString` / `QuietUninstallString`。没有卸载程序的应用，可选 BCU 4.16 引擎的 `UniversalUninstaller` 处理；BCU 只执行卸载，不启用残留清理。支持单个卸载和批量卸载。
+- **应用卸载**：只走 BCU 4.16：单个和批量都生成 `.bcul` 交给 `BCU-console`，不启用残留清理。所有软件（含系统组件）只要 BCU 能接手就显示卸载按钮，状态分为「可以卸载 / 谨慎卸载 / 不可卸载」。
 - **系统修复**：提供扫描、修复、重置、重启等维护动作，并记录每一步的状态和结果。
 - **网络修复**：覆盖 DNS、网卡、网关、hosts、代理、服务、MTU、静态路由和测速。
 - **检测规则**：把清理建议、残留判定和维护项的来源、依据集中展示，便于核对。
@@ -83,7 +83,7 @@ WinTune is a Windows 10/11 system optimization, cleanup, and hardware monitoring
 
 | Project | Version | Description |
 |---|---|---|
-| **WinTune** | 1.5.41 | Main application. A WebView2 single-page UI plus a C# engine for scanning, cleanup, optimization, repair, network diagnostics, and hardware overview. |
+| **WinTune** | 1.5.42 | Main application. A WebView2 single-page UI plus a C# engine for scanning, cleanup, optimization, repair, network diagnostics, and hardware overview. |
 | **MiniMonitor** | 1.6.14 | Taskbar hardware monitor and screenshot tool. Runs independently or from WinTune; includes an elevated temperature agent and screenshot editor. |
 
 ### WinTune features

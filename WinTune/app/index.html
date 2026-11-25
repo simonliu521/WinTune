@@ -564,7 +564,7 @@ pre.details{max-height:150px;overflow:auto;background:#1b232d;border:1px solid v
           </button>
           <button class="qcard" onclick="go('apps')">
             <span class="qi"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><path d="M14 17h6M17 14v6"/></svg></span>
-            <span class="qb"><b>应用卸载</b><p>调用官方卸载程序，不删安装目录</p></span>
+            <span class="qb"><b>应用卸载</b><p>BCU 统一卸载，支持单个与批量</p></span>
             <span class="ar">›</span>
           </button>
           <button class="qcard" onclick="go('repair')">
@@ -719,7 +719,7 @@ pre.details{max-height:150px;overflow:auto;background:#1b232d;border:1px solid v
       </div>
       <!-- 应用管理 -->
       <div class="view" data-v="apps" hidden>
-        <div class="pagehead"><h2>应用卸载</h2><p>清单来自系统卸载登记表，可以按名字搜。卸载只调用软件自己的卸载程序（窗口可见、由你确认），不删除安装目录，也不做静默强删。系统组件、运行库和驱动会单独标出，避免误卸。</p></div>
+        <div class="pagehead"><h2>应用卸载</h2><p>清单来自系统卸载登记表，可以按名字搜。卸载只走 BCUninstaller：单个和批量都由 BCU 执行，不调用软件自带卸载器，也不做残留/Junk 清理。所有软件只要 BCU 能接手都会显示卸载按钮；系统组件、运行库和驱动标成「谨慎卸载」，删前会再次确认。</p></div>
         <div class="toolstrip">
           <div class="sbox"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.2 4.2"/></svg><input id="appSearch" placeholder="搜名称 / 发布者 / 安装路径" oninput="renderApps()"></div>
           <div class="seg2" id="appSeg"></div>
@@ -1140,10 +1140,11 @@ function row(k, v){
 }
 
 function renderCleanKpi(){
-  var free = 0, care = 0, keep = 0;
+  var free = 0, care = 0, keep = 0, app = 0;
   S.order.forEach(function(id){
     var it = S.items[id];
     if(!it || !it.ok) return;
+    if(it.cat === "app") app += it.bytes;
     if(it.tier === "free") free += it.bytes;
     else if(it.tier === "care") care += it.bytes;
     else if(it.tier === "keep") keep += it.bytes;
@@ -1153,7 +1154,8 @@ function renderCleanKpi(){
   $("cleanKpi").innerHTML =
     card("系统盘 C:", disk ? (disk.usedGB + "<span>/ " + disk.totalGB + " GB</span>") : "—",
          disk ? ("可用 " + disk.freeGB + " GB") : "") +
-    card("安全可删", '<span style="color:var(--ok)">' + fmt(free) + '</span>', "随意删 · 默认勾选") +
+    card("安全可删", '<span style="color:var(--ok)">' + fmt(free) + '</span>',
+         "随意删 · 默认勾选" + (app ? " · 软件缓存 " + fmt(app) : "")) +
     card("可清理总计", '<span style="color:var(--warn)">' + fmt(free + care) + '</span>', "含谨慎项") +
     card("不建议删", '<span style="color:var(--risk)">' + fmt(keep) + '</span>', "默认不勾 · 可强制删除");
 }
@@ -1224,14 +1226,18 @@ function onScanDone(m){
 /* 多个路径的最长公共目录；不足盘符级时返回空 */
 function renderGroups(){
   var html = "";
-  var tiers = [
-    {k:"free", cls:"g1", name:"随意删", color:"var(--ok)", tip:"默认全选 · 不影响任何功能"},
-    {k:"care", cls:"g2", name:"谨慎删", color:"var(--warn)", tip:"默认不勾 · 每项都写了代价"},
-    {k:"keep", cls:"g3", name:"不建议删", color:"var(--risk)", tip:"默认不选 · 勾了就是强制删除"}
+  var groups = [
+    {k:"free-system", tier:"free", cat:"system", cls:"g1", name:"随意删", color:"var(--ok)", tip:"默认全选 · 不影响任何功能"},
+    {k:"free-app", tier:"free", cat:"app", cls:"g1", name:"软件缓存", color:"var(--ok)", tip:"只清缓存 / 日志 · 不动账号、聊天记录、下载与文档"},
+    {k:"care", tier:"care", cls:"g2", name:"谨慎删", color:"var(--warn)", tip:"默认不勾 · 每项都写了代价"},
+    {k:"keep", tier:"keep", cls:"g3", name:"不建议删", color:"var(--risk)", tip:"默认不选 · 勾了就是强制删除"}
   ];
 
-  tiers.forEach(function(t){
-    var ids = S.order.filter(function(id){ return S.items[id] && S.items[id].tier === t.k; });
+  groups.forEach(function(t){
+    var ids = S.order.filter(function(id){
+      var it = S.items[id];
+      return it && it.tier === t.tier && (t.cat ? (it.cat || "system") === t.cat : true);
+    });
     if(!ids.length) return;
     var bytes = 0;
     ids.forEach(function(id){ if(S.items[id].ok) bytes += S.items[id].bytes; });
@@ -1241,11 +1247,12 @@ function renderGroups(){
     ids.forEach(function(id){
       var it = S.items[id];
       var on = S.sel[id] ? "on" : "";
-      var lock = (!it.ok || (t.k === "keep" && !it.force)) ? "lock" : "";
+      var lock = (!it.ok || (t.tier === "keep" && !it.force)) ? "lock" : "";
       var badge = "";
       if(!it.ok) badge = '<em class="badge2">' + esc(it.skip || "不可用") + '</em>';
-      else if(t.k === "free") badge = '<em class="badge2 ok">安全</em>';
-      else if(t.k === "care") badge = '<em class="badge2 warn">谨慎选择</em>';
+      else if(t.cat === "app") badge = '<em class="badge2 ok">可重建缓存</em>';
+      else if(t.tier === "free") badge = '<em class="badge2 ok">安全</em>';
+      else if(t.tier === "care") badge = '<em class="badge2 warn">谨慎选择</em>';
       else badge = on ? '<em class="badge2 risk">强制删除</em>' : '<em class="badge2 risk">建议保留</em>';
       var sizeTxt = it.bytes ? fmt(it.bytes) : (it.files ? it.files + " 条" : "—");
 
@@ -2186,7 +2193,7 @@ function onDeps(d){
     h += '<div class="kv"><span>' + it.n + ' <i style="color:var(--dim);font-style:normal">' + it.d + '</i></span>' +
       (ok ? '<b style="color:var(--ok)">已就绪</b>' : '<b style="color:var(--warn)">自动补装中</b>') + '</div>';
   });
-  h += '<div class="kv"><span>软件版本</span><b>' + esc((S.sys && S.sys.version) || "1.5.41") + '</b></div>';
+  h += '<div class="kv"><span>软件版本</span><b>' + esc((S.sys && S.sys.version) || "1.5.42") + '</b></div>';
   box.innerHTML = h;
 }
 
@@ -2733,13 +2740,13 @@ function renderAppsKpi(){
   var n = S.apps.items.length;
   var sys = S.apps.items.filter(function(a){ return a.kind === "system"; }).length;
   var per = n - sys;
-  var un = S.apps.items.filter(function(a){ return appSelectable(a); }).length;
-  var cc = S.apps.items.filter(function(a){ return a.canRemove && !a.runtime; }).length;
-  var rt = S.apps.items.filter(function(a){ return a.runtime; }).length;
+  var ok = S.apps.items.filter(function(a){ return a.status === "可以卸载"; }).length;
+  var caution = S.apps.items.filter(function(a){ return a.status === "谨慎卸载"; }).length;
+  var blocked = S.apps.items.filter(function(a){ return a.status === "不可卸载"; }).length;
   $("appNote").innerHTML = '共 <b style="color:var(--text)">' + n + '</b> 个 · 系统应用 <b style="color:var(--muted)">' + sys +
-    '</b> · 个人安装 <b style="color:var(--text)">' + per + '</b> · 可卸载 <b style="color:var(--ok)">' + un +
-    '</b>' + (cc ? ' · 卸载入口失效 <b style="color:var(--warn)">' + cc + '</b>' : '') +
-    (rt ? ' · 系统组件·别删 <b style="color:var(--muted)">' + rt + '</b>' : '');
+    '</b> · 个人安装 <b style="color:var(--text)">' + per + '</b> · 可以卸载 <b style="color:var(--ok)">' + ok +
+    '</b> · 谨慎卸载 <b style="color:var(--warn)">' + caution +
+    '</b> · 不可卸载 <b style="color:var(--muted)">' + blocked + '</b>';
 }
 
 function findApp(id){
@@ -2748,7 +2755,7 @@ function findApp(id){
 }
 
 function appSelectable(a){
-  return !!a && !a.runtime && (a.canUninstall || a.canRemove);
+  return !!a && !!a.canBcu;
 }
 
 function toggleAppSel(e, el){
@@ -2805,12 +2812,14 @@ function bcuConfirm(ids){
   var list = [];
   ids.forEach(function(id){ var a = findApp(id); if(appSelectable(a)) list.push(a); });
   if(!list.length) return;
+  var caution = list.filter(function(a){ return a.status === "谨慎卸载"; }).length;
   var names = list.slice(0, 6).map(function(a){ return "「" + a.name + "」"; }).join("、");
   if(list.length > 6) names += " 等";
   confirmModal(list.length > 1 ? "批量卸载确认" : "BCU 卸载确认",
     '<div class="hint danger">将用 <b>BCUninstaller ' + esc(S.apps.bcuVer || "4.16") + '</b> 卸载 ' + list.length + ' 个程序：' + esc(names) + '。' +
     '只执行卸载，不做软件残留扫描，不清理其它目录。卸载过程中可能弹出软件自己的窗口，请按提示完成。</div>' +
-    '<div class="hint" style="margin-top:8px">没有卸载程序的应用会由 BCU 的 UniversalUninstaller 处理；系统运行库和驱动已自动排除。</div>',
+    (caution ? '<div class="hint danger" style="margin-top:8px">其中 <b>' + caution + '</b> 个是「谨慎卸载」：系统组件、运行库或没有官方卸载命令，BCU 仍可接手，但可能影响其它软件或系统功能。</div>' : '') +
+    '<div class="hint" style="margin-top:8px">WinTune 自身组件不会出现在可卸载列表；系统软件只要 BCU 能接手也允许卸载，风险已在状态里标出。</div>',
     "开始卸载",
     function(){ startBcu(list.map(function(a){ return a.id; })); });
 }
@@ -2830,7 +2839,7 @@ function onBcuStart(m){
   if(box) box.textContent = "";
   $("mTitle").textContent = "BCU 正在卸载 · " + (m.total || 0) + " 个";
   if($("mBody")) $("mBody").innerHTML = '<div class="hint">BCU 已启动，正在扫描程序并匹配卸载清单。' +
-    (m.skipped ? " 已跳过 " + m.skipped + " 个系统组件。" : "") + '</div>' +
+    (m.skipped ? " 已跳过 " + m.skipped + " 个不可卸载项。" : "") + '</div>' +
     '<div class="rlog" id="execLog" style="margin-top:10px;min-height:120px"></div>';
 }
 
@@ -2849,7 +2858,7 @@ function onBcuDone(m){
   $("mTitle").textContent = m.ok ? "BCU 卸载完成" : "BCU 卸载未完成";
   $("mBody").innerHTML =
     '<div class="grid g2" style="margin-bottom:12px">' +
-      card("本次选中", String(m.total || 0) + " 个", m.skipped ? "跳过 " + m.skipped + " 个系统组件" : "只执行卸载") +
+      card("本次选中", String(m.total || 0) + " 个", m.skipped ? "跳过 " + m.skipped + " 个不可卸载项" : "只执行卸载") +
       card("仍存在", '<span style="color:' + ((m.remaining || 0) > 0 ? "var(--warn)" : "var(--ok)") + '">' + (m.remaining || 0) + '</span>', "重新扫描卸载登记表") +
       card("补删登记", String(m.regRemoved || 0) + " 条", "仅限本次选中且目录已删除") +
     '</div>' +
@@ -2871,7 +2880,9 @@ function renderApps(){
   var items = all.filter(function(a){
     if(f === "system" && a.kind !== "system") return false;
     if(f === "personal" && a.kind !== "personal") return false;
-    if(f === "uninstall" && !(appSelectable(a) && !a.runtime)) return false;
+    if(f === "ok" && a.status !== "可以卸载") return false;
+    if(f === "caution" && a.status !== "谨慎卸载") return false;
+    if(f === "blocked" && a.status !== "不可卸载") return false;
     if(!q) return true;
     return ((a.name || "") + " " + (a.pub || "") + " " + (a.loc || "")).toLowerCase().indexOf(q) >= 0;
   });
@@ -2880,28 +2891,31 @@ function renderApps(){
   if($("appSeg")){
     var sysN = all.filter(function(a){ return a.kind === "system"; }).length;
     var perN = all.length - sysN;
-    var unN = all.filter(function(a){ return appSelectable(a); }).length;
+    var okN = all.filter(function(a){ return a.status === "可以卸载"; }).length;
+    var caN = all.filter(function(a){ return a.status === "谨慎卸载"; }).length;
+    var noN = all.filter(function(a){ return a.status === "不可卸载"; }).length;
     function sb(k, label){ return '<button class="' + ((S.apps.f || "all") === k ? "on" : "") + '" data-f="' + k + '">' + label + '</button>'; }
     $("appSeg").innerHTML = sb("all", "全部 " + all.length) + sb("system", "系统应用 " + sysN) +
-      sb("personal", "个人安装 " + perN) + sb("uninstall", "可卸载 " + unN);
+      sb("personal", "个人安装 " + perN) + sb("ok", "可以卸载 " + okN) +
+      sb("caution", "谨慎卸载 " + caN) + sb("blocked", "不可卸载 " + noN);
   }
 
   renderAppsKpi();
 
   var groups = [
-    {k:"personal", name:"个人安装", tip:"你自己装的软件；卸载会调它自己的卸载程序"},
-    {k:"system",   name:"系统应用", tip:"随 Windows 安装或微软组件；标「可删除」的能卸载，标「运行库·别删」的删了别的软件会起不来，标「随系统」的没有卸载入口"}
+    {k:"personal", name:"个人安装", tip:"你自己装的软件；卸载统一交给 BCU"},
+    {k:"system",   name:"系统应用", tip:"随 Windows 安装或微软组件；能由 BCU 接手的也会显示卸载按钮，统一标「谨慎卸载」"}
   ];
   var html = "";
   groups.forEach(function(g){
     var list = items.filter(function(a){ return a.kind === g.k; });
     if(!list.length) return;
-    var removable = list.filter(function(a){ return a.canUninstall && !a.runtime; }).length;
-    var brokenN = list.filter(function(a){ return a.canRemove && !a.runtime; }).length;
-    var runtimeN = list.filter(function(a){ return a.runtime; }).length;
+    var okN = list.filter(function(a){ return a.status === "可以卸载"; }).length;
+    var caN = list.filter(function(a){ return a.status === "谨慎卸载"; }).length;
+    var noN = list.filter(function(a){ return a.status === "不可卸载"; }).length;
     html += '<div class="gbox"><div class="ghead"><b>' + g.name + ' · ' + list.length + ' 个</b>' +
       '<span class="tip">' + g.tip + '</span>' +
-      '<span class="sum">' + removable + ' 个可卸载' + (brokenN ? ' · <span style="color:var(--warn)">' + brokenN + ' 个入口失效</span>' : '') + (runtimeN ? ' · ' + runtimeN + ' 个系统组件' : '') + '</span></div>' +
+      '<span class="sum">' + okN + ' 个可以卸载' + (caN ? ' · <span style="color:var(--warn)">' + caN + ' 个谨慎</span>' : '') + (noN ? ' · ' + noN + ' 个不可卸载' : '') + '</span></div>' +
       '<div class="apphead"><span></span><span></span><span>应用</span><span>版本</span><span style="text-align:right">大小</span>' +
       '<span>来源</span><span style="text-align:right">状态</span><span></span></div>';
     list.slice(0, 300).forEach(function(a){
@@ -2913,14 +2927,10 @@ function renderApps(){
         ? '<span class="badge2">系统</span>'
         : '<span class="badge2 blue">个人</span>';
       var stBadge;
-      if(a.runtime) stBadge = '<span class="badge2">系统组件·别删</span>';
-      else if(a.canUninstall) stBadge = a.kind === "system" ? '<span class="badge2 warn">可删除</span>' : '<span class="badge2 ok">可卸载</span>';
-      else if(a.canRemove) stBadge = (a.un === "missing")
-        ? '<span class="badge2 risk">卸载程序丢失</span>'
-        : '<span class="badge2 risk">无卸载命令</span>';
-      else stBadge = a.kind === "system" ? '<span class="badge2">随系统</span>' : '<span class="badge2">无卸载命令</span>';
-      var btns = (a.canUninstall && !a.runtime ? '<button class="mini" data-id="' + esc(a.id) + '" onclick="appUninstall(event)">卸载</button>' : '') +
-        (!a.canUninstall && a.canRemove && !a.runtime ? '<button class="mini" data-id="' + esc(a.id) + '" onclick="appBcuUninstall(event)">BCU 卸载</button>' : '') +
+      if(a.status === "可以卸载") stBadge = '<span class="badge2 ok" title="' + esc(a.statusWhy || "") + '">可以卸载</span>';
+      else if(a.status === "谨慎卸载") stBadge = '<span class="badge2 warn" title="' + esc(a.statusWhy || "") + '">谨慎卸载</span>';
+      else stBadge = '<span class="badge2 risk" title="' + esc(a.statusWhy || "") + '">不可卸载</span>';
+      var btns = (a.canBcu ? '<button class="mini" data-id="' + esc(a.id) + '" onclick="appBcuUninstall(event)">卸载</button>' : '') +
         '<button class="mini" data-id="' + esc(a.id) + '" onclick="appOpenLoc(event)">打开目录</button>';
       var canSel = appSelectable(a);
       var selOn = !!S.apps.sel[a.id];
@@ -2964,35 +2974,6 @@ function renderRec(){
   $("appRec").innerHTML = html || '<div class="hint" style="padding:14px">读取中…</div>';
 }
 
-function appUninstall(e){
-  e.stopPropagation();
-  var id = e.currentTarget.getAttribute("data-id");
-  var a = findApp(id);
-  if(!a) return;
-  confirmModal("卸载确认",
-    '<div class="hint danger">将调用 <b>' + esc(a.name) + '</b> 自己的卸载程序。卸载由它接管，会弹出它自己的窗口，请在那里完成。</div>' +
-    '<div class="kv" style="margin-top:8px"><span>版本</span><b>' + esc(a.ver || "—") + '</b></div>' +
-    '<div class="kv"><span>发布者</span><b>' + esc(a.pub || "—") + '</b></div>' +
-    '<div class="hint" style="margin-top:10px">WinTune 只负责启动官方卸载程序；卸载完成后，安装目录和残留项由你自己核对，不再自动删除。</div>',
-    "打开卸载程序",
-    function(){ post({cmd:"appUninstall", id: id}); refreshAppAfterUninstall(id); }, "danger");
-}
-
-// 官方卸载器是独立进程，WinTune 不知道它什么时候结束；启动后轮询卸载登记表，
-// 该条一旦从列表消失就停止，不必整页手动刷新。
-function refreshAppAfterUninstall(id){
-  var tries = 0;
-  function tick(){
-    if(!S.apps.items || !findApp(id)) return;
-    if(tries >= 30) return;
-    tries++;
-    post({cmd:"apps"});
-    setTimeout(tick, 2000);
-  }
-  setTimeout(tick, 1200);
-}
-
-/* 卸载程序丢了的应用：先查清目录与快捷方式，再给两条路 —— 只移除登记 / 连目录一起删 */
 function appOpenLoc(e){
   e.stopPropagation();
   post({cmd:"appLocation", id: e.currentTarget.getAttribute("data-id")});

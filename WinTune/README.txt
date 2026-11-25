@@ -1145,3 +1145,14 @@ WinTune 1.5.40 · 工程说明（交付 / 二次开发请先读这一页）
   7. 没有安装包：只提示一次，标记写入 %APPDATA%\MiniMonitor\pawnio.noinstaller.prompted，后续开机不再重复。
   8. 不再因为“温度读不到”弹修复提示：PawnIO 在跑就不再提示。右键菜单保留手动入口：安装温度驱动 / 启动温度驱动 / 修复温度驱动。
   9. 真实温度：MiniMonitor 代理补齐 LHM 需要的 RAMSPDToolkit-NDD / DiskInfoToolkit / System.Numerics.Vectors 等运行库后，已能读到 CPU Package 温度（本机实测 pkg=39 / max=39 / 12 个核心传感器）；任务栏温度来自管理员代理共享内存。WinTune 硬件面板直接读 LHM，也显示同一颗 CPU 的 Package 温度。
+
+四十五、1.5.42（软件缓存清单 + BCU 全量应用卸载）
+
+  1. 一键清理新增「软件缓存」组：与系统缓存分开显示，只列 Cache / Code Cache / GPUCache / ShaderCache / Crashpad / 日志这类可重建目录；默认勾选。
+  2. 已知软件缓存：Edge / Chrome / Brave / Vivaldi / Opera / Firefox 的每个账户配置；Office 文档缓存；Adobe 媒体缓存；微信日志与崩溃记录；QQ 音乐日志；npm / NuGet 缓存；Steam 客户端缓存。
+  3. 动态识别：扫描当前用户 %LOCALAPPDATA% 与 %APPDATA% 下已装软件的缓存子目录，向下最多 4 层（覆盖 User Data\Default\Cache、Partitions\xxx\Cache 这类结构），只认明确可重建的目录名；users、WebStorage、blob_storage、Local Storage、IndexedDB、Session Storage 等可能承载登录态或用户数据的目录一律不碰。
+  4. 不加入聊天记录、接收文件、下载文件、文档、项目目录；原「微信 / QQ 聊天记录」强制删除项已从清理清单移除。
+  5. 应用卸载只走 BCU：不再调用软件自带 UninstallString，不再显示原生「卸载」按钮；单个和批量都生成 .bcul 交给 BCU-console。
+  6. 状态分三档：可以卸载（个人软件且官方卸载命令可用）；谨慎卸载（系统组件、运行库/驱动、没有官方命令由 BCU 通用卸载器接手）；不可卸载（WinTune 自身组件或缺少 BCU 引擎）。
+  7. 系统软件不再在 BCU 层静默跳过：只要 BCU 能接手就显示卸载按钮，风险由「谨慎卸载」状态和二次确认提示承担；WinTune / MiniMonitor 自身仍禁止卸载。
+  8. 验收：应用清单 24 个「可以卸载」、25 个「谨慎卸载」；软件缓存扫描本机 29 项、约 4.17 GB，其中豆包缓存/日志约 2.7 GB、抖音缓存 346 MB、Edge 缓存 172 MB、微信日志 33 MB。

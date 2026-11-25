@@ -342,17 +342,8 @@ namespace WinTune
                 case "appsRec":
                     SendAsync(new Func<string>(Apps.RecommendJson), "appsRec");
                     break;
-                case "appUninstall":
-                    Send(Apps.Uninstall(Json.Str(d, "id")));
-                    break;
                 case "bcuUninstall":
                     StartBcuUninstall(Json.StrList(d, "ids"));
-                    break;
-                case "appLeftover":
-                    StartAppLeftover(Json.Str(d, "id"));
-                    break;
-                case "appRemove":
-                    StartAppRemove(Json.Str(d, "id"), Json.Str(d, "mode"));
                     break;
                 case "appLocation":
                     Send(Apps.OpenLocation(Json.Str(d, "id")));
@@ -542,7 +533,7 @@ namespace WinTune
             string dir = BackupDir();
             Send(new JB()
                 .Add("type", "init")
-                .Add("version", "1.5.41")
+                .Add("version", "1.5.42")
                 .Add("admin", SysInfo.IsAdmin())
                 .Add("osName", SysInfo.OsName())
                 .Add("build", SysInfo.BuildNumber())

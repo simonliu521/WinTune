@@ -260,7 +260,9 @@ namespace WinTune
                 string iconPath = ExeOf(a);
                 bool keep = IsKeep(a.Name);
                 string ust = UninstallerState(a);
-                bool ufail = HasFailed(a.Id);
+                string statusWhy;
+                string status = BcuStatus(a, ust, keep, out statusWhy);
+                bool canBcu = status != "不可卸载";
                 sb.Append(new JB()
                     .Add("id", a.Id).Add("name", a.Name).Add("ver", a.Ver)
                     .Add("pub", a.Pub).Add("loc", a.Loc).Add("date", a.Date)
@@ -270,8 +272,10 @@ namespace WinTune
                     .Add("exe", iconPath == null ? "" : iconPath)
                     .Add("runtime", keep)
                     .Add("un", ust)
-                    .Add("canUninstall", ust == "ok" && !keep && !ufail)
-                    .Add("canRemove", !keep && (ust != "ok" || ufail))
+                    .Add("status", status).Add("statusWhy", statusWhy)
+                    .Add("canBcu", canBcu)
+                    .Add("canUninstall", canBcu)
+                    .Add("canRemove", false)
                     .End());
             }
             sb.Append("]}");
@@ -298,6 +302,55 @@ namespace WinTune
             if (n.Contains("nvidia")) return true;
             if (n.Contains("amd chipset") || n.Contains("intel(r) chipset")) return true;
             return false;
+        }
+
+        /// <summary>WinTune 自身组件不提供卸载入口，避免把自己卸掉。</summary>
+        public static bool IsSelf(App a)
+        {
+            if (a == null) return false;
+            string s = (a.Name + " " + a.Pub + " " + a.Loc).ToLowerInvariant();
+            return s.Contains("wintune") || s.Contains("minimonitor");
+        }
+
+        /// <summary>
+        /// 应用卸载只走 BCU，所以状态按 BCU 能否接手来分：
+        /// 可以卸载 = 个人软件且官方卸载命令可用；谨慎卸载 = 系统组件/运行库/没有官方命令，BCU 仍能处理；不可卸载 = 自身组件或缺少 BCU。
+        /// </summary>
+        public static string BcuStatus(App a, string uninstallerState, bool keep, out string why)
+        {
+            why = "";
+            if (!Bcu.Available())
+            {
+                why = "缺少 BCU 引擎";
+                return "不可卸载";
+            }
+            if (IsSelf(a))
+            {
+                why = "WinTune 自身组件";
+                return "不可卸载";
+            }
+            if (uninstallerState == "ok" && !keep && a.Kind != "system")
+            {
+                why = "官方卸载命令可用";
+                return "可以卸载";
+            }
+            if (keep)
+            {
+                why = "运行库 / 驱动，卸载可能影响其它软件或硬件";
+                return "谨慎卸载";
+            }
+            if (a.Kind == "system")
+            {
+                why = "系统组件，卸载可能影响系统功能";
+                return "谨慎卸载";
+            }
+            if (uninstallerState == "missing")
+            {
+                why = "官方卸载入口已失效，将由 BCU 通用卸载器处理";
+                return "谨慎卸载";
+            }
+            why = "没有官方卸载命令，将由 BCU 通用卸载器处理";
+            return "谨慎卸载";
         }
 
         /// <summary>本次运行中点「卸载」但卸载器起不来的项（命令指向的 exe 在，运行却失败）。</summary>

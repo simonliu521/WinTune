@@ -57,23 +57,16 @@ namespace WinTune
                     if (all[i].Id == id) { a = all[i]; break; }
                 }
                 if (a == null) continue;
-                if (Apps.IsKeep(a.Name)) { skipped++; continue; }
-                if (a.Loc.Length > 0)
-                {
-                    string why;
-                    if (!Guard.CanDelete(a.Loc, new string[] { a.Loc }, true, out why))
-                    {
-                        skipped++;
-                        continue;
-                    }
-                }
+                /* 只保护 WinTune 自身；系统组件、运行库和驱动也交给 BCU，
+                   由界面用「谨慎卸载」提醒用户，不再在引擎层静默跳过。 */
+                if (Apps.IsSelf(a)) { skipped++; continue; }
                 targets.Add(a);
             }
 
             if (targets.Count == 0)
             {
                 onEvent(new JB().Add("type", "bcuDone").Add("ok", false)
-                    .Add("msg", skipped > 0 ? "选中的都是系统运行库/驱动，已跳过" : "没有找到可卸载的程序").End());
+                    .Add("msg", skipped > 0 ? "选中的是 WinTune 自身组件，已跳过" : "没有找到可卸载的程序").End());
                 return;
             }
 
