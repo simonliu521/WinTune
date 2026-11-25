@@ -89,9 +89,9 @@ WinTune is a Windows 10/11 system optimization, cleanup, and hardware monitoring
 ### WinTune features
 
 - **Overview**: CPU, memory, GPU, storage, temperature sensors, fan and runtime status, with one-click cleanup and network check.
-- **One-click cleanup**: Scans temporary files, caches, update residue and other C: drive items; it does not scan or delete "software residue" directories; creates a manifest and restore point before deletion.
+- **One-click cleanup**: Scans temporary files, system caches and update residue on the C: drive. A separate "software cache" group lists rebuildable Cache / Code Cache / GPUCache / log folders per installed app, without touching accounts, chat history, downloads or documents.
 - **System optimization**: Manages optimization items by light/medium/heavy profiles, with per-item apply, revert and original-value backup.
-- **Application uninstall**: Reads the Windows uninstall registry and launches each app's own official uninstaller; supports `UninstallString` / `QuietUninstallString`. Apps without an uninstaller can use the optional BCU 4.16 `UniversalUninstaller` engine. BCU is used for uninstall only, never for leftover cleanup. Single and batch uninstall are supported.
+- **Application uninstall**: BCU 4.16 only. Single and batch uninstall both generate a `.bcul` list for `BCU-console`, with no leftover cleanup. Every app, including system components, gets an uninstall button when BCU can handle it; status is shown as "Can uninstall / Uninstall with caution / Cannot uninstall".
 - **System repair**: Provides scan, repair, reset and restart maintenance actions, with per-step status and results.
 - **Network repair**: Covers DNS, network adapters, gateway, hosts, proxy, services, MTU, static routes and speed tests.
 - **Detection rules**: Shows the evidence and source for cleanup suggestions, residue decisions and maintenance items.
