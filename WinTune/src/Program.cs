@@ -67,6 +67,8 @@ namespace WinTune
             bool depsjson = false;
             string speedServer = "auto";
             string diag = "";
+            string pawnioAction = "";
+            string pawnioResult = "";
             for (int i = 0; i < args.Length; i++)
             {
                 string a = args[i];
@@ -80,6 +82,19 @@ namespace WinTune
                     if (i + 1 < args.Length && !args[i + 1].StartsWith("--")) speedServer = args[i + 1];
                 }
                 if (a == "--diag" && i + 1 < args.Length) diag = args[i + 1];
+                if (a == "--pawnio-start" || a == "--pawnio-install" || a == "--pawnio-fix")
+                {
+                    pawnioAction = a.Substring(9);
+                    if (i + 1 < args.Length && !args[i + 1].StartsWith("--")) pawnioResult = args[++i];
+                }
+            }
+
+            /* 提权子进程：只做 PawnIO 启动/安装，写结果文件后退出，不建窗口、不抢单实例 */
+            if (pawnioAction.Length > 0)
+            {
+                int rc = Hardware.PawnioCli(pawnioAction, pawnioResult);
+                Environment.Exit(rc);
+                return;
             }
 
             /* 测速的无人值守自检：不开窗口，把完整过程与结果写进 speedtest.log，便于核对是否真测满 10 秒 */

@@ -1922,22 +1922,30 @@ function kpiPatch(){
       var title = !installed
         ? "检测不到 CPU 温度，请安装依赖程序"
         : (!running ? "CPU 温度依赖未启动" : "CPU 温度仍未返回");
-      var txt = !m.admin
-        ? "请以管理员身份重新启动 WinTune，再处理温度依赖。"
-        : (!installed
-          ? (setup ? "安装后即可读取真实 CPU 温度。" : "完整包缺少依赖安装程序，请重新解压完整版。")
-          : (!running
-            ? "依赖已经安装，但驱动没在运行；点「启动依赖」拉起服务并重新加载传感器。"
-            : "驱动已在运行，但温度仍未返回；点「启动依赖」会重新加载传感器，仍无效请检查 MiniMonitor 组件是否完整。"));
+      var txt;
+      if(!installed && !setup){
+        txt = "完整包缺少依赖安装程序，请重新解压完整版。";
+      } else if(!m.admin){
+        txt = "点按钮会弹出一次 UAC，允许后自动" + (installed ? "启动" : "安装") +
+              "依赖；当前界面不是管理员，温度仍可能读不到。";
+      } else if(!installed){
+        txt = "安装后即可读取真实 CPU 温度。";
+      } else if(!running){
+        txt = "依赖已经安装，但驱动没在运行；点「启动依赖」拉起服务并重新加载传感器。";
+      } else {
+        txt = "驱动已在运行，但温度仍未返回；点「启动依赖」会重新加载传感器，仍无效请检查 MiniMonitor 组件是否完整。";
+      }
       var node = $("pawnioWarnText");
       if(node && node.textContent !== txt) node.textContent = txt;
       var t = $("pawnioTitle");
       if(t && t.textContent !== title) t.textContent = title;
       var b = $("pawnioBtn");
       if(b){
-        var label = installed ? "启动依赖" : "安装依赖";
+        var label = PAWNIO_BUSY
+          ? (installed ? "正在启动…" : "正在安装…")
+          : (installed ? "启动依赖" : "安装依赖");
         if(b.textContent !== label) b.textContent = label;
-        b.disabled = (!m.admin || (!installed && !setup));
+        b.disabled = PAWNIO_BUSY || (!installed && !setup);
       }
     }
   }
@@ -2214,10 +2222,13 @@ function mmSet(k, v){ post({cmd:"mmSet", key:k, value:String(v)}); }
 function pawnioAction(){
   var hw = S.hw || {};
   var installed = !!hw.pawnio;
+  var setup = !!hw.pawnioSetup;
+  if(!installed && !setup){ toast("完整包缺少 PawnIO_setup.exe，请重新解压完整版。"); return; }
   var key = installed ? "pawnioStart" : "pawnioInstall";
+  PAWNIO_BUSY = true;
   var b = $("pawnioBtn");
   if(b){ b.disabled = true; b.textContent = installed ? "正在启动…" : "正在安装…"; }
-  toast(installed ? "正在启动温度依赖…" : "正在安装温度依赖…");
+  toast(installed ? "正在请求管理员权限并启动温度依赖…" : "正在请求管理员权限并安装温度依赖…");
   post({cmd:"mmSet", key:key, value:"1"});
   setTimeout(loadHw, 1800);
   setTimeout(loadHw, 5000);
@@ -2243,7 +2254,7 @@ function onDeps(d){
     h += '<div class="kv"><span>' + it.n + ' <i style="color:var(--dim);font-style:normal">' + it.d + '</i></span>' +
       (ok ? '<b style="color:var(--ok)">已就绪</b>' : '<b style="color:var(--warn)">自动补装中</b>') + '</div>';
   });
-  h += '<div class="kv"><span>软件版本</span><b>' + esc((S.sys && S.sys.version) || "1.5.49") + '</b></div>';
+  h += '<div class="kv"><span>软件版本</span><b>' + esc((S.sys && S.sys.version) || "1.5.50") + '</b></div>';
   box.innerHTML = h;
 }
 
@@ -2315,6 +2326,7 @@ function openLog(){ post({cmd:"openLog"}); }
 function exportReport(){ post({cmd:"exportReport"}); }
 
 /* ===== 系统优化（39 项，轻度 / 中度 / 重度三档） ===== */
+var PAWNIO_BUSY = false;
 S.tune = { items: [], sel: {}, data: null, mode: "none", f: "all", q: "", drawer: "" };
 S.apps = { items: [], rec: [], winget: null, sel: {}, bcu: false, bcuVer: "" };
 S.repair = { items: [], admin: false };
@@ -3969,6 +3981,7 @@ if(bridge){
       case "hw": onHw(m); break;
       case "mm": onMm(m); break;
       case "mmSet":
+        PAWNIO_BUSY = false;
         toast(m.msg);
         if(m.ok) loadMm();
         setTimeout(loadHw, 1500);
