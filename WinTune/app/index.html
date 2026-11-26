@@ -575,7 +575,7 @@ pre.details{max-height:150px;overflow:auto;background:#1b232d;border:1px solid v
             <b id="pawnioTitle" style="color:var(--risk)">检测不到 CPU 温度，请安装依赖程序</b>
             <div id="pawnioWarnText" style="margin-top:4px;color:var(--muted);font-size:12px"></div>
           </div>
-          <button id="pawnioBtn" class="btn pri" onclick="installPawnio()">安装依赖</button>
+          <button id="pawnioBtn" class="btn pri" onclick="pawnioAction()">安装依赖</button>
         </div>
 
         <div class="qgrid" id="ovQuick">
@@ -1916,24 +1916,28 @@ function kpiPatch(){
     var needPawnio = !hasTemp && hw.memTotalMb > 0 && hw.time;
     pw.style.display = needPawnio ? "flex" : "none";
     if(needPawnio){
-      var title = "检测不到 CPU 温度，请安装依赖程序";
+      var installed = !!hw.pawnio;
+      var running = !!hw.pawnioRun;
       var setup = !!hw.pawnioSetup;
+      var title = !installed
+        ? "检测不到 CPU 温度，请安装依赖程序"
+        : (!running ? "CPU 温度依赖未启动" : "CPU 温度仍未返回");
       var txt = !m.admin
-        ? "请以管理员身份重新启动 WinTune，再安装依赖程序。"
-        : (!setup
-          ? "完整包缺少依赖安装程序，请重新解压完整版。"
-          : (hw.pawnio
-            ? "依赖已安装，但温度仍未返回；可重新安装依赖，或检查 MiniMonitor 组件是否完整。"
-            : "安装后即可读取真实 CPU 温度。"));
+        ? "请以管理员身份重新启动 WinTune，再处理温度依赖。"
+        : (!installed
+          ? (setup ? "安装后即可读取真实 CPU 温度。" : "完整包缺少依赖安装程序，请重新解压完整版。")
+          : (!running
+            ? "依赖已经安装，但驱动没在运行；点「启动依赖」拉起服务并重新加载传感器。"
+            : "驱动已在运行，但温度仍未返回；点「启动依赖」会重新加载传感器，仍无效请检查 MiniMonitor 组件是否完整。"));
       var node = $("pawnioWarnText");
       if(node && node.textContent !== txt) node.textContent = txt;
       var t = $("pawnioTitle");
       if(t && t.textContent !== title) t.textContent = title;
       var b = $("pawnioBtn");
       if(b){
-        var label = "安装依赖";
+        var label = installed ? "启动依赖" : "安装依赖";
         if(b.textContent !== label) b.textContent = label;
-        b.disabled = (!m.admin || !setup);
+        b.disabled = (!m.admin || (!installed && !setup));
       }
     }
   }
@@ -2207,12 +2211,17 @@ function onMm(m){
     '</div>';
 }
 function mmSet(k, v){ post({cmd:"mmSet", key:k, value:String(v)}); }
-function installPawnio(){
+function pawnioAction(){
   var hw = S.hw || {};
-  toast(hw.pawnio ? "正在启动温度依赖…" : "正在安装温度依赖…");
-  mmSet("pawnio", "1");
-  setTimeout(loadHw, 6000);
-  setTimeout(loadHw, 12000);
+  var installed = !!hw.pawnio;
+  var key = installed ? "pawnioStart" : "pawnioInstall";
+  var b = $("pawnioBtn");
+  if(b){ b.disabled = true; b.textContent = installed ? "正在启动…" : "正在安装…"; }
+  toast(installed ? "正在启动温度依赖…" : "正在安装温度依赖…");
+  post({cmd:"mmSet", key:key, value:"1"});
+  setTimeout(loadHw, 1800);
+  setTimeout(loadHw, 5000);
+  setTimeout(function(){ loadHw(); }, 12000);
 }
 function mmKey(){ mmSet("hotkey", $("mmHot").value); }
 function mmDir(){ mmSet("savedir", $("mmDir").value); }
@@ -2234,7 +2243,7 @@ function onDeps(d){
     h += '<div class="kv"><span>' + it.n + ' <i style="color:var(--dim);font-style:normal">' + it.d + '</i></span>' +
       (ok ? '<b style="color:var(--ok)">已就绪</b>' : '<b style="color:var(--warn)">自动补装中</b>') + '</div>';
   });
-  h += '<div class="kv"><span>软件版本</span><b>' + esc((S.sys && S.sys.version) || "1.5.48") + '</b></div>';
+  h += '<div class="kv"><span>软件版本</span><b>' + esc((S.sys && S.sys.version) || "1.5.49") + '</b></div>';
   box.innerHTML = h;
 }
 
@@ -3962,6 +3971,7 @@ if(bridge){
       case "mmSet":
         toast(m.msg);
         if(m.ok) loadMm();
+        setTimeout(loadHw, 1500);
         break;
       case "deps": onDeps(m); break;
       case "evidence": onEvidence(m); break;

@@ -40,9 +40,23 @@ namespace WinTune
         [DllImport("kernel32.dll")]
         private static extern ulong GetTickCount64();
 
+        private static bool pawnioBootTried;
+
         private static void Ensure()
         {
             if (pc != null) return;
+            /* 注销/重启后 PawnIO 是手动启动的内核驱动，常常处于停止状态。
+               传感器对象一旦在驱动启动前 Open，CPU 温度就会一直空白；
+               所以在第一次初始化前先把驱动拉起来，再打开 LibreHardwareMonitor。 */
+            if (!pawnioBootTried)
+            {
+                pawnioBootTried = true;
+                try
+                {
+                    if (PawnioInstalled() && !PawnioRunning()) StartPawnio();
+                }
+                catch { }
+            }
             if (err.Length > 0) return;
             try
             {
@@ -65,8 +79,18 @@ namespace WinTune
 
         public static void Close()
         {
-            try { if (pc != null) pc.Close(); } catch { }
-            pc = null;
+            lock (sync)
+            {
+                try { if (pc != null) pc.Close(); } catch { }
+                pc = null;
+                err = "";
+            }
+        }
+
+        /// <summary>驱动启动/重启后必须重新 Open 传感器，否则温度读数不会自己回来。</summary>
+        public static void ResetSensors()
+        {
+            Close();
         }
 
         public static string CpuName()
@@ -627,7 +651,9 @@ namespace WinTune
                     catch { return Fail("打不开目录：" + dir); }
                     return Ok("已打开：" + dir);
                 }
-                if (key == "pawnio") return InstallPawnio();
+                if (key == "pawnio") return InstallPawnio();          /* 兼容旧版前端 */
+                if (key == "pawnioInstall") return InstallPawnio();
+                if (key == "pawnioStart") return StartPawnioAction();
                 if (key == "start") return StartMiniMonitor();
                 if (key == "restart")
                 {
@@ -821,13 +847,28 @@ namespace WinTune
             return "";
         }
 
+        /// <summary>只启动已安装的驱动；启动后重开传感器。按钮显「启动依赖」时走这里。</summary>
+        static string StartPawnioAction()
+        {
+            if (!PawnioInstalled())
+                return Fail("PawnIO 还没有安装，请先点「安装依赖」");
+            bool ok = StartPawnio();
+            ResetSensors();
+            if (ok)
+                return Ok("PawnIO 驱动已启动，温度传感器已重新加载，CPU 温度会在几秒内刷新");
+            return Fail("PawnIO 已安装，但驱动启动失败（可能被安全软件拦截或服务被禁用）；请重装依赖或查看系统事件");
+        }
+
         /// <summary>启动或安装 PawnIO：已安装但服务停了先 sc start；真缺驱动才运行安装程序。</summary>
         static string InstallPawnio()
         {
             if (PawnioInstalled())
             {
                 if (StartPawnio())
-                    return Ok("PawnIO 驱动已启动，CPU 温度会在几秒内刷新");
+                {
+                    ResetSensors();
+                    return Ok("PawnIO 驱动已启动，温度传感器已重新加载，CPU 温度会在几秒内刷新");
+                }
             }
 
             string setup = FindPawnioSetup();
@@ -850,7 +891,10 @@ namespace WinTune
                 using (Process p = Process.Start(psi)) p.WaitForExit(30000);
                 pawnioCheckAt = DateTime.MinValue;
                 if (PawnioInstalled() && StartPawnio())
-                    return Ok("PawnIO 已安装并运行，CPU 温度会在几秒内刷新");
+                {
+                    ResetSensors();
+                    return Ok("PawnIO 已安装并运行，温度传感器已重新加载，CPU 温度会在几秒内刷新");
+                }
                 return Fail("安装程序已退出，但没有检测到正在运行的 PawnIO 服务；请按安装窗口提示完成后重开 WinTune");
             }
             catch (Exception ex) { return Fail("运行 PawnIO 安装程序失败：" + ex.Message); }
